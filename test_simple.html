@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Simple Test</title>
+  <style>
+    body {margin:0; overflow:hidden; background: #202020;}
+  </style>
+</head>
+<body>
+<div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: Arial, sans-serif; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px;">
+  テスト開始...
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r162/three.min.js"></script>
+<script>
+const infoDiv = document.getElementById('info');
+
+function updateInfo(message) {
+  console.log(message);
+  infoDiv.innerHTML = message;
+}
+
+try {
+  updateInfo("JavaScript実行中...");
+  
+  if (typeof THREE === 'undefined') {
+    updateInfo("エラー: Three.jsが読み込まれていません");
+    throw new Error("Three.js not loaded");
+  }
+  
+  updateInfo("Three.js読み込み確認OK");
+
+  // シーン、カメラ、レンダラーを作成
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x404040);
+  
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 5;
+
+  const renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  updateInfo("レンダラー作成完了");
+
+  // キューブを作成
+  const geometry = new THREE.BoxGeometry();
+  const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  const cube = new THREE.Mesh(geometry, material);
+  scene.add(cube);
+
+  updateInfo("キューブ作成完了、アニメーション開始");
+
+  // アニメーションループ
+  function animate() {
+    requestAnimationFrame(animate);
+    
+    cube.rotation.x += 0.01;
+    cube.rotation.y += 0.01;
+    
+    renderer.render(scene, camera);
+  }
+
+  animate();
+
+  updateInfo("テスト成功！緑のキューブが回転します");
+
+} catch (error) {
+  console.error("エラー詳細:", error);
+  updateInfo(`エラー: ${error.message}<br>コンソールを確認してください`);
+}
+</script>
+</body>
+</html>

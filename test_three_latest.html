@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>Three.js Latest Test</title>
+  <style>
+    body {margin:0; overflow:hidden; background: #202020;}
+  </style>
+</head>
+<body>
+<div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: Arial, sans-serif; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px;">
+  Three.js最新版テスト...
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.163.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+const infoDiv = document.getElementById('info');
+
+function updateInfo(message) {
+  console.log(message);
+  infoDiv.innerHTML = message;
+}
+
+try {
+  updateInfo("Three.js読み込み中...");
+  
+  const THREE = await import('three');
+  
+  updateInfo("Three.js読み込み完了、シーン作成中...");
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x404040);
+  
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.z = 5;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  updateInfo("レンダラー作成完了、オブジェクト作成中...");
+
+  // キューブを作成
+  const geometry = new THREE.BoxGeometry(2, 2, 2);
+  const material = new THREE.MeshBasicMaterial({ 
+    color: 0x00ff00,
+    wireframe: true 
+  });
+  const cube = new THREE.Mesh(geometry, material);
+  scene.add(cube);
+
+  // 座標軸も追加
+  const axesHelper = new THREE.AxesHelper(3);
+  scene.add(axesHelper);
+
+  updateInfo("Three.js成功！緑のワイヤーフレームキューブが回転します");
+
+  // アニメーションループ
+  function animate() {
+    requestAnimationFrame(animate);
+    
+    cube.rotation.x += 0.01;
+    cube.rotation.y += 0.01;
+    
+    renderer.render(scene, camera);
+  }
+
+  // リサイズ対応
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  animate();
+
+} catch (error) {
+  console.error("エラー詳細:", error);
+  updateInfo(`エラー: ${error.message}<br>ネットワーク接続を確認してください`);
+}
+</script>
+</body>
+</html>
