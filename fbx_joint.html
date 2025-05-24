@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>FBX Skeleton Viewer</title>
+  <style>
+    body {margin:0; overflow:hidden;}
+  </style>
+</head>
+<body>
+<script type="module">
+import * as THREE from "https://unpkg.com/three@0.162.0/build/three.module.js";
+import { OrbitControls } from "https://unpkg.com/three@0.162.0/examples/jsm/controls/OrbitControls.js";
+import { FBXLoader } from "https://unpkg.com/three@0.162.0/examples/jsm/loaders/FBXLoader.js";
+
+const scene     = new THREE.Scene();
+scene.background = new THREE.Color(0x202020);
+const camera    = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
+camera.position.set(3,2,5);
+
+const renderer  = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+new OrbitControls(camera, renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+
+let mixer;
+const loader = new FBXLoader();
+loader.load("./your_skeleton.fbx", (root) => {
+
+  // シーンへ追加
+  scene.add(root);
+
+  // — SkeletonHelper で骨を線表示 —
+  root.traverse( obj => {
+    if (obj.isBone && !obj.parent.isBone) {           // ルート Bone だけ拾う
+      const helper = new THREE.SkeletonHelper(obj);
+      helper.material.linewidth = 2;
+      scene.add(helper);
+    }
+  });
+
+  // — アニメーション再生 —
+  if (root.animations && root.animations.length) {
+    mixer = new THREE.AnimationMixer(root);
+    const action = mixer.clipAction(root.animations[0]);
+    action.play();
+  }
+});
+
+const clock = new THREE.Clock();
+window.addEventListener("resize", () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+(function animate(){
+  requestAnimationFrame(animate);
+  if (mixer) mixer.update(clock.getDelta());
+  renderer.render(scene, camera);
+})();
+</script>
+</body>
+</html>
