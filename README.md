@@ -6,7 +6,7 @@
 
 ---
 
-![image](https://github.com/user-attachments/assets/be5e97a1-d3cf-4ac8-8155-11f7e7476a2f)
+![image](https://github.com/user-attachments/assets/347e84d2-d284-48e7-b563-43ab1c410db7)
 
 
 ## 使い方
