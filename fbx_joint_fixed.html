@@ -137,6 +137,16 @@ try {
       scene.remove(currentFBXObject);
       currentFBXObject = null;
     }
+    
+    // 既存のスケルトンヘルパーとAxesHelperを削除
+    const objectsToRemove = [];
+    scene.traverse((obj) => {
+      if (obj.type === 'SkeletonHelper' || obj.type === 'AxesHelper') {
+        objectsToRemove.push(obj);
+      }
+    });
+    objectsToRemove.forEach(obj => scene.remove(obj));
+    
     if (mixer) {
       mixer.stopAllAction();
       mixer = null;
