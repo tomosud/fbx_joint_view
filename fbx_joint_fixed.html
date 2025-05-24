@@ -19,6 +19,13 @@
 <div id="fileImport" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif;">
   <div style="margin-bottom: 10px; font-size: 14px; font-weight: bold;">FBXファイル読み込み</div>
   <input type="file" id="fbxFileInput" accept=".fbx" style="margin-bottom: 10px; color: white; background: rgba(255,255,255,0.1); border: 1px solid #555; border-radius: 3px; padding: 5px;">
+  
+  <!-- 座標系変換チェックボックス -->
+  <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+    <input type="checkbox" id="convertToYUp" checked style="margin: 0;">
+    <label for="convertToYUp" style="font-size: 12px; cursor: pointer;">Z-up → Y-up 変換</label>
+  </div>
+  
   <button id="loadBtn" style="display: block; width: 100%; padding: 8px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;" disabled>ファイルを読み込み</button>
 </div>
 
@@ -170,9 +177,20 @@ try {
       
       updateInfo(`FBX読み込み完了<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
 
-      // Y-up座標系に変換（FBXはZ-upが多いため）
-      // X軸を-90度回転してZ-upからY-upに変換
-      root.rotation.x = -Math.PI / 2;
+      // 座標系変換（チェックボックスの状態に応じて）
+      const convertToYUp = document.getElementById('convertToYUp').checked;
+      const coordinateSystem = convertToYUp ? 'Y-up (変換適用)' : 'Z-up (元の座標系)';
+      
+      if (convertToYUp) {
+        // Y-up座標系に変換（FBXはZ-upが多いため）
+        // X軸を-90度回転してZ-upからY-upに変換
+        root.rotation.x = -Math.PI / 2;
+        console.log("Z-up → Y-up変換を適用");
+      } else {
+        // 元の座標系を維持（Z-up）
+        root.rotation.x = 0;
+        console.log("元の座標系（Z-up）を維持");
+      }
       
       // シーンへ追加
       scene.add(root);
@@ -220,11 +238,11 @@ try {
             console.log("ボーンにAxesHelperを追加:", obj.name);
           }
         });
-        updateInfo(`FBX読み込み完了<br>ボーン: ${boneCount}個（AxesHelper表示）<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーン: ${boneCount}個（AxesHelper表示）<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
       } else if (skeletonFound) {
-        updateInfo(`FBX読み込み完了<br>スケルトン表示中<br>ボーン: ${boneCount}個<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>スケルトン表示中<br>ボーン: ${boneCount}個<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
       } else {
-        updateInfo(`FBX読み込み完了<br>ボーンが見つかりません<br>オブジェクト構造をコンソールで確認してください`);
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーンが見つかりません<br>オブジェクト構造をコンソールで確認してください`);
       }
 
       // — アニメーション再生 —
@@ -297,6 +315,26 @@ try {
     if (file) {
       const fileUrl = URL.createObjectURL(file);
       loadFBXFile(fileUrl, file.name);
+    }
+  });
+
+  // 座標系変換チェックボックスのイベントリスナー
+  const convertToYUpCheckbox = document.getElementById('convertToYUp');
+  convertToYUpCheckbox.addEventListener('change', () => {
+    // 既に読み込まれているFBXオブジェクトがある場合、リアルタイムで座標系を変更
+    if (currentFBXObject) {
+      const convertToYUp = convertToYUpCheckbox.checked;
+      if (convertToYUp) {
+        // Y-up座標系に変換
+        currentFBXObject.rotation.x = -Math.PI / 2;
+        console.log("座標系をY-upに変更");
+        updateInfo(`座標系: Y-up (変換適用)<br>ボーン表示中<br>アニメーション: ${currentFBXObject.animations ? currentFBXObject.animations.length : 0}個`);
+      } else {
+        // 元の座標系を維持（Z-up）
+        currentFBXObject.rotation.x = 0;
+        console.log("座標系をZ-upに変更");
+        updateInfo(`座標系: Z-up (元の座標系)<br>ボーン表示中<br>アニメーション: ${currentFBXObject.animations ? currentFBXObject.animations.length : 0}個`);
+      }
     }
   });
 
