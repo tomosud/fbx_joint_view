@@ -1,5 +1,7 @@
 # 骨アニメーション FBX ビューワ
 
+https://tomosud.github.io/fbx_joint_view/fbx_joint_fixed.html
+
 ## 目的
 - **メッシュを含まない FBX（ジョイント／ボーン階層 + アニメーション）の再生** をブラウザだけで行う。  
 - ドラッグ操作で視点操作
