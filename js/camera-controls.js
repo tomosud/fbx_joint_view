@@ -6,8 +6,6 @@ export class CameraControls {
     this.camera = camera;
     this.renderer = renderer;
     this.scene = scene;
-    this.currentControlMode = 'orbit';
-    this.orbitControls = null;
     this.fpsControls = null;
     this.crosshair = document.getElementById('crosshair');
     
@@ -21,36 +19,25 @@ export class CameraControls {
     };
     
     this.moveSpeed = 100;
-    this.init();
+    this.heightAdjustSpeed = 50;
   }
 
   async init() {
-    const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
     const { PointerLockControls } = await import('three/addons/controls/PointerLockControls.js');
-    
-    // OrbitControls初期化
-    this.orbitControls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.orbitControls.mouseButtons = {
-      LEFT: THREE.MOUSE.ROTATE,
-      MIDDLE: THREE.MOUSE.PAN,
-      RIGHT: THREE.MOUSE.DOLLY
-    };
-    this.orbitControls.enableDamping = true;
-    this.orbitControls.dampingFactor = 0.05;
-    this.orbitControls.screenSpacePanning = false;
 
     // PointerLockControls初期化
     this.fpsControls = new PointerLockControls(this.camera, document.body);
     
     this.setupEventListeners();
     this.setupUI();
+    
+    // 自動的にFPSモードを開始
+    this.startFPS();
   }
 
   setupEventListeners() {
     // FPS移動制御
     document.addEventListener('keydown', (event) => {
-      if (this.currentControlMode !== 'fps') return;
-      
       switch (event.code) {
         case 'KeyW': this.moveState.forward = true; break;
         case 'KeyS': this.moveState.backward = true; break;
@@ -62,8 +49,6 @@ export class CameraControls {
     });
     
     document.addEventListener('keyup', (event) => {
-      if (this.currentControlMode !== 'fps') return;
-      
       switch (event.code) {
         case 'KeyW': this.moveState.forward = false; break;
         case 'KeyS': this.moveState.backward = false; break;
@@ -74,68 +59,75 @@ export class CameraControls {
       }
     });
 
-    // キーボードショートカット
+    // Escキーでポインターロック解除（一時的）
     document.addEventListener('keydown', (event) => {
-      // Escキーでポインターロック解除
-      if (event.code === 'Escape' && this.currentControlMode === 'fps') {
-        this.switchToOrbit();
-        return;
-      }
-      
-      // FPSモード時のWASD移動キーは除外
-      if (this.currentControlMode === 'fps' && ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space', 'ShiftLeft'].includes(event.code)) {
-        return;
-      }
-      
-      switch (event.code) {
-        case 'KeyC': // カメラ切り替え
-          if (this.currentControlMode === 'orbit') {
-            this.switchToFPS();
-            this.fpsControls.lock();
-          } else {
-            this.switchToOrbit();
-          }
-          event.preventDefault();
-          break;
+      if (event.code === 'Escape') {
+        this.unlockPointer();
+        // 3秒後に自動で再ロック（カメラ再生中でなければ）
+        setTimeout(() => {
+          this.maintainPointerLock();
+        }, 3000);
+        event.preventDefault();
       }
     });
+
+    // ホイールスクロール高さ調整
+    document.addEventListener('wheel', (event) => {
+      if (this.fpsControls && this.fpsControls.isLocked) {
+        const deltaY = event.deltaY;
+        this.camera.position.y -= deltaY * 0.01; // 高さ調整速度
+        event.preventDefault();
+      }
+    }, { passive: false });
   }
 
   setupUI() {
-    const orbitBtn = document.getElementById('orbitBtn');
-    const fpsBtn = document.getElementById('fpsBtn');
-
-    orbitBtn.addEventListener('click', () => this.switchToOrbit());
-    fpsBtn.addEventListener('click', () => {
-      this.switchToFPS();
-      this.fpsControls.lock();
-    });
+    // UIセットアップは不要（自動でFPSモード開始）
   }
 
-  switchToOrbit() {
-    this.currentControlMode = 'orbit';
-    if (this.fpsControls) this.fpsControls.unlock();
-    if (this.orbitControls) this.orbitControls.enabled = true;
-    this.crosshair.style.display = 'none';
-    
-    document.getElementById('orbitBtn').style.background = '#4CAF50';
-    document.getElementById('fpsBtn').style.background = '#555';
-    document.getElementById('captureControls').style.display = 'none';
-  }
-
-  switchToFPS() {
-    this.currentControlMode = 'fps';
-    if (this.orbitControls) this.orbitControls.enabled = false;
+  startFPS() {
     this.crosshair.style.display = 'block';
     
-    document.getElementById('orbitBtn').style.background = '#555';
-    document.getElementById('fpsBtn').style.background = '#4CAF50';
-    document.getElementById('captureControls').style.display = 'block';
+    // ポインターロックのイベントリスナー
+    document.addEventListener('pointerlockchange', () => {
+      if (document.pointerLockElement === document.body) {
+        console.log('ポインターロック開始');
+      } else {
+        console.log('ポインターロック解除');
+      }
+    });
+    
+    // 初期化後に自動でポインターロック開始
+    setTimeout(() => {
+      this.lockPointer();
+    }, 3000);
+  }
+
+  // ポインターロック状態を維持するメソッド
+  maintainPointerLock() {
+    // ショートカットキー専用のため、常にポインターロックを維持
+    if (!this.fpsControls.isLocked) {
+      setTimeout(() => {
+        this.lockPointer();
+      }, 100);
+    }
+  }
+
+  lockPointer() {
+    if (this.fpsControls) {
+      this.fpsControls.lock();
+    }
+  }
+
+  unlockPointer() {
+    if (this.fpsControls) {
+      this.fpsControls.unlock();
+    }
   }
 
   update(deltaTime) {
     // FPS移動制御
-    if (this.currentControlMode === 'fps' && this.fpsControls && this.fpsControls.isLocked) {
+    if (this.fpsControls && this.fpsControls.isLocked) {
       const moveDistance = this.moveSpeed * deltaTime;
       
       if (this.moveState.forward) this.fpsControls.moveForward(moveDistance);
@@ -145,14 +137,10 @@ export class CameraControls {
       if (this.moveState.up) this.camera.position.y += moveDistance;
       if (this.moveState.down) this.camera.position.y -= moveDistance;
     }
-    
-    if (this.currentControlMode === 'orbit' && this.orbitControls) {
-      this.orbitControls.update();
-    }
   }
 
   getCurrentMode() {
-    return this.currentControlMode;
+    return 'fps'; // 常にFPSモード
   }
 
   isFPSLocked() {

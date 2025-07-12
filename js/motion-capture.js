@@ -11,12 +11,11 @@ export class MotionCapture {
     this.animationDuration = 0;
     this.currentAction = null;
     
-    this.recordBtn = document.getElementById('recordBtn');
-    this.stopBtn = document.getElementById('stopBtn');
-    this.exportBtn = document.getElementById('exportBtn');
-    this.playbackBtn = document.getElementById('playbackBtn');
     this.recordStatus = document.getElementById('recordStatus');
     this.recordTime = document.getElementById('recordTime');
+    
+    // カメラ表示用のオブジェクト配列
+    this.cameraVisualizationObjects = [];
     
     this.isPlayingBack = false;
     this.playbackStartTime = 0;
@@ -28,25 +27,69 @@ export class MotionCapture {
   }
 
   setupEventListeners() {
-    this.recordBtn.addEventListener('click', () => this.startRecording());
-    this.stopBtn.addEventListener('click', () => this.stopRecording());
-    this.exportBtn.addEventListener('click', () => this.exportCameraMotion());
-    this.playbackBtn.addEventListener('click', () => this.togglePlayback());
-
     // キーボードショートカット
     document.addEventListener('keydown', (event) => {
-      if (event.code === 'KeyR') {
-        // FPSモード時のみ記録操作
-        if (window.cameraControls && window.cameraControls.getCurrentMode() === 'fps') {
-          if (!this.isRecording) {
-            this.startRecording();
-          } else {
-            this.stopRecording();
+      switch (event.code) {
+        case 'KeyP': // Play/Stop animation
+          if (window.toggleAnimation) {
+            window.toggleAnimation();
           }
           event.preventDefault();
-        }
+          break;
+        case 'KeyO': // Capture/Stop recording
+          this.toggleRecording();
+          event.preventDefault();
+          break;
+        case 'KeyI': // Camera playback toggle
+          this.togglePlayback();
+          event.preventDefault();
+          break;
+        case 'KeyU': // Export glTF
+          this.exportCameraMotion();
+          event.preventDefault();
+          break;
+        case 'KeyK': // Toggle coordinate system
+          this.toggleCoordinateSystem();
+          event.preventDefault();
+          break;
+        case 'KeyL': // Load FBX
+          this.loadFBXFile();
+          event.preventDefault();
+          break;
       }
     });
+  }
+
+  toggleCoordinateSystem() {
+    const checkbox = document.getElementById('convertToYUp');
+    checkbox.checked = !checkbox.checked;
+    
+    // 座標系変更イベントを発火
+    const event = new Event('change');
+    checkbox.dispatchEvent(event);
+    
+    console.log('座標系切り替え:', checkbox.checked ? 'Y-up' : 'Z-up');
+  }
+
+  loadFBXFile() {
+    const fileInput = document.getElementById('fbxFileInput');
+    fileInput.click();
+  }
+
+  toggleRecording() {
+    if (!this.isRecording) {
+      this.startRecording();
+    } else {
+      this.stopRecording();
+    }
+  }
+
+  togglePlayback() {
+    if (!this.isPlayingBack) {
+      this.startPlayback();
+    } else {
+      this.stopPlayback();
+    }
   }
 
   setAnimationData(action, duration) {
@@ -55,7 +98,12 @@ export class MotionCapture {
   }
 
   startRecording() {
-    if (!window.cameraControls || window.cameraControls.getCurrentMode() !== 'fps') return;
+    // ポインターロックが無効な場合は自動で有効にする
+    if (!window.cameraControls || !window.cameraControls.isFPSLocked()) {
+      if (window.cameraControls) {
+        window.cameraControls.lockPointer();
+      }
+    }
     
     // アニメーションを再生開始
     if (this.currentAction && !this.currentAction.isRunning()) {
@@ -70,11 +118,7 @@ export class MotionCapture {
     this.animationStartTime = this.currentAction ? this.currentAction.time : 0;
     this.cameraMotionData = [];
     
-    this.recordBtn.disabled = true;
-    this.stopBtn.disabled = false;
     this.recordStatus.textContent = '記録中...';
-    this.recordBtn.style.background = '#888';
-    this.stopBtn.style.background = '#f44336';
     
     console.log('カメラモーション記録開始, アニメーション時間:', this.animationStartTime);
   }
@@ -82,24 +126,17 @@ export class MotionCapture {
   stopRecording() {
     this.isRecording = false;
     
-    this.recordBtn.disabled = false;
-    this.stopBtn.disabled = true;
     this.recordStatus.textContent = `記録完了: ${this.cameraMotionData.length}フレーム`;
-    this.recordBtn.style.background = '#f44336';
-    this.stopBtn.style.background = '#555';
     
-    // 書き出しボタンとプレイバックボタンを有効化
-    this.exportBtn.disabled = false;
-    this.playbackBtn.disabled = false;
-    this.exportBtn.style.background = '#2196F3';
-    this.playbackBtn.style.background = '#4CAF50';
+    // カメラの軌跡を可視化
+    this.visualizeCameraPath();
     
     console.log('カメラモーション記録完了:', this.cameraMotionData.length, 'フレーム');
   }
 
   update(deltaTime) {
     // カメラモーション記録
-    if (this.isRecording && window.cameraControls && window.cameraControls.getCurrentMode() === 'fps' && window.cameraControls.isFPSLocked()) {
+    if (this.isRecording && window.cameraControls && window.cameraControls.isFPSLocked()) {
       const currentTime = (performance.now() - this.recordStartTime) / 1000;
       const currentAnimationTime = this.animationStartTime + currentTime;
       
@@ -110,8 +147,7 @@ export class MotionCapture {
         quaternion: this.camera.quaternion.clone()
       });
       
-      const totalTime = this.animationDuration > 0 ? this.animationDuration : currentAnimationTime;
-      this.recordTime.textContent = `${currentTime.toFixed(1)}s / ${totalTime.toFixed(1)}s`;
+      this.recordTime.textContent = `${currentTime.toFixed(1)}s`;
     }
 
     // カメラモーション再生
@@ -129,10 +165,10 @@ export class MotionCapture {
         }
       }
       
-      // 再生終了チェック
+      // ループ再生チェック
       const lastFrame = this.cameraMotionData[this.cameraMotionData.length - 1];
       if (playbackTime >= lastFrame.time) {
-        this.stopPlayback();
+        this.playbackStartTime = performance.now(); // ループリスタート
       }
     }
   }
@@ -164,24 +200,15 @@ export class MotionCapture {
     }
   }
 
-  togglePlayback() {
+  // togglePlayback メソッドは削除（個別の start/stop メソッドを使用）
+
+  startPlayback() {
     if (this.cameraMotionData.length === 0) {
       alert('記録されたカメラモーションがありません');
       return;
     }
 
-    if (!this.isPlayingBack) {
-      this.startPlayback();
-    } else {
-      this.stopPlayback();
-    }
-  }
-
-  startPlayback() {
-    // カメラを軌道モードに切り替え
-    if (window.cameraControls) {
-      window.cameraControls.switchToOrbit();
-    }
+    // カメラ再生中はポインターロックを維持（ショートカットキーのため）
     
     // 現在のカメラ位置を保存
     this.originalCameraPosition.copy(this.camera.position);
@@ -197,8 +224,7 @@ export class MotionCapture {
       this.currentAction.paused = false;
     }
     
-    this.playbackBtn.textContent = '⏸ 停止';
-    this.playbackBtn.style.background = '#ff9800';
+    // カメラ再生開始状態
     
     console.log('カメラモーション再生開始');
   }
@@ -210,10 +236,17 @@ export class MotionCapture {
     this.camera.position.copy(this.originalCameraPosition);
     this.camera.quaternion.copy(this.originalCameraQuaternion);
     
-    this.playbackBtn.textContent = '▶ 再生';
-    this.playbackBtn.style.background = '#4CAF50';
+    // ポインターロックを維持（ショートカットキー専用のため）
+    if (window.cameraControls && !window.cameraControls.isFPSLocked()) {
+      window.cameraControls.lockPointer();
+    }
     
     console.log('カメラモーション再生停止');
+  }
+
+  // プレイバック状態の取得
+  getPlaybackState() {
+    return this.isPlayingBack;
   }
 
   async exportCameraMotion() {
@@ -297,5 +330,64 @@ export class MotionCapture {
 
   hasRecordedData() {
     return this.cameraMotionData.length > 0;
+  }
+
+  // カメラパスの可視化
+  visualizeCameraPath() {
+    // 既存の可視化オブジェクトを削除
+    this.clearCameraVisualization();
+    
+    if (this.cameraMotionData.length === 0) return;
+    
+    const scene = window.app.scene;
+    
+    // カメラ軌跡のライン作成
+    const points = this.cameraMotionData.map(frame => frame.position);
+    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    const material = new THREE.LineBasicMaterial({ 
+      color: 0x00ff00, 
+      linewidth: 2,
+      transparent: true,
+      opacity: 0.8
+    });
+    const line = new THREE.Line(geometry, material);
+    scene.add(line);
+    this.cameraVisualizationObjects.push(line);
+    
+    // カメラ位置にコーンマーカーを配置（間引き表示）
+    const step = Math.max(1, Math.floor(this.cameraMotionData.length / 20)); // 最大20個
+    for (let i = 0; i < this.cameraMotionData.length; i += step) {
+      const frame = this.cameraMotionData[i];
+      
+      // ワイヤーフレームコーンを作成
+      const coneGeometry = new THREE.ConeGeometry(0.3, 1, 6);
+      const coneMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff4444, 
+        wireframe: true,
+        transparent: true,
+        opacity: 0.7
+      });
+      const cone = new THREE.Mesh(coneGeometry, coneMaterial);
+      
+      // カメラの位置と向きに配置
+      cone.position.copy(frame.position);
+      cone.quaternion.copy(frame.quaternion);
+      
+      scene.add(cone);
+      this.cameraVisualizationObjects.push(cone);
+    }
+    
+    console.log(`カメラパス可視化: ${this.cameraVisualizationObjects.length}オブジェクト`);
+  }
+
+  // カメラ可視化オブジェクトの削除
+  clearCameraVisualization() {
+    const scene = window.app.scene;
+    this.cameraVisualizationObjects.forEach(obj => {
+      scene.remove(obj);
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
+    this.cameraVisualizationObjects = [];
   }
 }

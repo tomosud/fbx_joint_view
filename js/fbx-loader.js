@@ -30,24 +30,15 @@ export class FBXLoaderSystem {
   setupUI() {
     // ファイル選択機能の設定
     const fbxFileInput = document.getElementById('fbxFileInput');
-    const loadBtn = document.getElementById('loadBtn');
 
+    // ファイル選択時に自動で読み込み
     fbxFileInput.addEventListener('change', (event) => {
       const file = event.target.files[0];
       if (file && file.name.toLowerCase().endsWith('.fbx')) {
-        loadBtn.disabled = false;
-        loadBtn.textContent = `${file.name}を読み込み`;
-      } else {
-        loadBtn.disabled = true;
-        loadBtn.textContent = 'ファイルを読み込み';
-      }
-    });
-
-    loadBtn.addEventListener('click', () => {
-      const file = fbxFileInput.files[0];
-      if (file) {
         const fileUrl = URL.createObjectURL(file);
         this.loadFBXFile(fileUrl, file.name);
+      } else if (file) {
+        alert('有効なFBXファイルを選択してください。');
       }
     });
 
@@ -125,8 +116,7 @@ export class FBXLoaderSystem {
       this.currentAction = null;
     }
 
-    // UIを非表示にする
-    document.getElementById('controls').style.display = 'none';
+    // UI制御は不要（ボタンが存在しないため）
     
     this.updateInfo(`FBX読み込み中... ${fileName || fileUrl}`);
     console.log("FBXファイルの読み込みを開始:", fileName || fileUrl);
@@ -233,8 +223,7 @@ export class FBXLoaderSystem {
       // モーションキャプチャにアニメーション情報を設定
       this.motionCapture.setAnimationData(this.currentAction, animationDuration);
       
-      // UI制御を表示
-      document.getElementById('controls').style.display = 'block';
+      // UI制御は不要（キーボードショートカットのため）
       
       // アニメーション制御の設定
       this.setupAnimationControls(this.currentAction, animationDuration);
@@ -244,80 +233,62 @@ export class FBXLoaderSystem {
   }
 
   setupAnimationControls(action, duration) {
-    const playPauseBtn = document.getElementById('playPauseBtn');
-    const resetBtn = document.getElementById('resetBtn');
-    const timeSlider = document.getElementById('timeSlider');
-    const timeDisplay = document.getElementById('timeDisplay');
-    const speedSlider = document.getElementById('speedSlider');
-    const speedDisplay = document.getElementById('speedDisplay');
+    let isPlaying = false;
     
-    let isPlaying = true;
+    // ループ設定
+    action.setLoop(THREE.LoopRepeat);
+    action.clampWhenFinished = false;
     
-    // 既存のイベントリスナーを削除
-    const newPlayPauseBtn = playPauseBtn.cloneNode(true);
-    playPauseBtn.parentNode.replaceChild(newPlayPauseBtn, playPauseBtn);
-    
-    const newResetBtn = resetBtn.cloneNode(true);
-    resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
-    
-    const newTimeSlider = timeSlider.cloneNode(true);
-    timeSlider.parentNode.replaceChild(newTimeSlider, timeSlider);
-    
-    const newSpeedSlider = speedSlider.cloneNode(true);
-    speedSlider.parentNode.replaceChild(newSpeedSlider, speedSlider);
-    
-    // 再生/一時停止ボタン
-    newPlayPauseBtn.addEventListener('click', () => {
-      if (isPlaying) {
-        action.paused = true;
-        isPlaying = false;
-        newPlayPauseBtn.innerHTML = '▶ 再生';
-        newPlayPauseBtn.style.background = '#4CAF50';
-      } else {
+    // 再生/停止関数（統合）
+    const togglePlayback = () => {
+      if (!isPlaying) {
+        // 再生開始
         action.paused = false;
         if (!action.isRunning()) {
           action.play();
         }
         isPlaying = true;
-        newPlayPauseBtn.innerHTML = '⏸ 停止';
-        newPlayPauseBtn.style.background = '#ff9800';
+        console.log('アニメーション再生開始');
+      } else {
+        // 停止
+        action.paused = true;
+        isPlaying = false;
+        console.log('アニメーション停止');
       }
-    });
+    };
     
-    newPlayPauseBtn.innerHTML = '⏸ 停止';
-    newPlayPauseBtn.style.background = '#ff9800';
+    // Pキーショートカット対応
+    window.toggleAnimation = togglePlayback;
     
-    // リセットボタン
-    newResetBtn.addEventListener('click', () => {
-      action.reset();
-      action.play();
-      isPlaying = true;
-      newPlayPauseBtn.innerHTML = '⏸ 停止';
-      newPlayPauseBtn.style.background = '#ff9800';
-    });
+    // タイムスライダーの設定
+    this.setupTimeSlider(action, duration);
     
-    // タイムスライダー
-    newTimeSlider.max = duration;
-    newTimeSlider.addEventListener('input', () => {
-      const time = parseFloat(newTimeSlider.value);
+    // 初期状態
+    action.paused = true;
+  }
+
+  setupTimeSlider(action, duration) {
+    const timeSliderContainer = document.getElementById('timeSliderContainer');
+    const timeSlider = document.getElementById('timeSlider');
+    const timeDisplay = document.getElementById('timeDisplay');
+    
+    timeSliderContainer.style.display = 'block';
+    timeSlider.max = duration;
+    
+    // スライダー操作時
+    timeSlider.addEventListener('input', () => {
+      const time = parseFloat(timeSlider.value);
       action.time = time;
-      if (!isPlaying) {
-        this.mixer.update(0);
+      if (action.paused) {
+        this.mixer.update(0); // 一時停止中でも位置を更新
       }
-    });
-    
-    // 速度スライダー
-    newSpeedSlider.addEventListener('input', () => {
-      const speed = parseFloat(newSpeedSlider.value);
-      action.setEffectiveTimeScale(speed);
-      speedDisplay.textContent = speed.toFixed(1) + 'x';
     });
     
     // 時間表示の更新関数
     window.updateTimeDisplay = () => {
       if (action) {
         const currentTime = action.time;
-        newTimeSlider.value = currentTime;
+        timeSlider.value = currentTime;
         timeDisplay.textContent = `${currentTime.toFixed(1)} / ${duration.toFixed(1)}s`;
       }
     };

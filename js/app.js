@@ -54,6 +54,7 @@ export class App {
       await this.fbxLoader.init();
 
       // グローバルアクセス用
+      window.app = this;
       window.cameraControls = this.cameraControls;
       window.motionCapture = this.motionCapture;
       window.fbxLoader = this.fbxLoader;
@@ -140,8 +141,20 @@ export class App {
       this.motionCapture.update(deltaTime);
     }
     
+    // カメラ高さ表示の更新
+    this.updateCameraHeightDisplay();
+    
     // レンダリング
     this.renderer.render(this.scene, this.camera);
+  }
+
+  updateCameraHeightDisplay() {
+    const infoDiv = document.getElementById('info');
+    if (infoDiv && this.camera) {
+      const height = this.camera.position.y.toFixed(2);
+      const content = infoDiv.innerHTML.split('<br>')[0]; // 最初の行を保持
+      infoDiv.innerHTML = `${content}<br>カメラ高さ: ${height}m`;
+    }
   }
 }
 
