@@ -22,6 +22,9 @@ export class MotionCapture {
     this.originalCameraPosition = new THREE.Vector3();
     this.originalCameraQuaternion = new THREE.Quaternion();
     
+    // プレイ時の動的カメラ表示用
+    this.currentCameraVisualization = null;
+    
     this.setupEventListeners();
   }
 
@@ -210,6 +213,9 @@ export class MotionCapture {
         if (this.currentAction) {
           this.currentAction.time = targetFrame.animationTime;
         }
+        
+        // 動的カメラ表示を更新
+        this.updateCurrentCameraVisualization(this.camera.position, this.camera.quaternion);
       }
       
       // ループ再生チェック
@@ -271,7 +277,8 @@ export class MotionCapture {
       this.currentAction.paused = false;
     }
     
-    // カメラ再生開始状態
+    // プレイ時の動的カメラ表示を作成
+    this.createCurrentCameraVisualization();
     
     console.log('カメラモーション再生開始');
   }
@@ -282,6 +289,9 @@ export class MotionCapture {
     // カメラ位置を復元
     this.camera.position.copy(this.originalCameraPosition);
     this.camera.quaternion.copy(this.originalCameraQuaternion);
+    
+    // 動的カメラ表示を削除
+    this.removeCurrentCameraVisualization();
     
     // ポインターロックを維持（ショートカットキー専用のため）
     if (window.cameraControls && !window.cameraControls.isFPSLocked()) {
@@ -420,6 +430,9 @@ export class MotionCapture {
       cone.position.copy(frame.position);
       cone.quaternion.copy(frame.quaternion);
       
+      // X軸で90度回転（コーンが正面を向くように）
+      cone.rotateX(Math.PI / 2);
+      
       scene.add(cone);
       this.cameraVisualizationObjects.push(cone);
     }
@@ -436,5 +449,55 @@ export class MotionCapture {
       if (obj.material) obj.material.dispose();
     });
     this.cameraVisualizationObjects = [];
+  }
+
+  // プレイ時の動的カメラ表示を作成
+  createCurrentCameraVisualization() {
+    const scene = window.app.scene;
+    
+    // 動的カメラのコーンを作成（青色で区別）
+    const coneGeometry = new THREE.ConeGeometry(0.4, 1.2, 6);
+    const coneMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0x0088ff, 
+      wireframe: true,
+      transparent: true,
+      opacity: 0.9
+    });
+    this.currentCameraVisualization = new THREE.Mesh(coneGeometry, coneMaterial);
+    
+    // X軸で90度回転（コーンが正面を向くように）
+    this.currentCameraVisualization.rotation.x = Math.PI / 2;
+    
+    scene.add(this.currentCameraVisualization);
+    console.log('動的カメラ表示を作成');
+  }
+
+  // 動的カメラ表示を更新
+  updateCurrentCameraVisualization(position, quaternion) {
+    if (this.currentCameraVisualization) {
+      this.currentCameraVisualization.position.copy(position);
+      this.currentCameraVisualization.quaternion.copy(quaternion);
+      
+      // X軸で90度回転を再適用
+      this.currentCameraVisualization.rotateX(Math.PI / 2);
+    }
+  }
+
+  // 動的カメラ表示を削除
+  removeCurrentCameraVisualization() {
+    if (this.currentCameraVisualization) {
+      const scene = window.app.scene;
+      scene.remove(this.currentCameraVisualization);
+      
+      if (this.currentCameraVisualization.geometry) {
+        this.currentCameraVisualization.geometry.dispose();
+      }
+      if (this.currentCameraVisualization.material) {
+        this.currentCameraVisualization.material.dispose();
+      }
+      
+      this.currentCameraVisualization = null;
+      console.log('動的カメラ表示を削除');
+    }
   }
 }
