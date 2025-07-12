@@ -172,24 +172,58 @@ export class FBXLoaderSystem {
     let skeletonFound = false;
     let boneCount = 0;
     
+    // バウンディングボックス情報をデバッグ出力（修正完了により無効化）
+    // const boundingBox = new THREE.Box3().setFromObject(root);
+    // console.log("=== バウンディングボックス解析 ===");
+    // console.log("Min:", boundingBox.min);
+    // console.log("Max:", boundingBox.max);
+    // console.log("Size:", boundingBox.getSize(new THREE.Vector3()));
+    // console.log("Center:", boundingBox.getCenter(new THREE.Vector3()));
+    
     root.traverse((obj) => {
       console.log("オブジェクト:", obj.name, "タイプ:", obj.type, "isBone:", obj.isBone);
       
+      // 各オブジェクトの位置情報をデバッグ出力（修正完了により無効化）
+      // if (obj.position) {
+      //   console.log("  位置:", obj.position.x, obj.position.y, obj.position.z);
+      // }
+      
       if (obj.isBone) {
         boneCount++;
+        // console.log("  ボーン位置:", obj.position.x, obj.position.y, obj.position.z);
+        // console.log("  ワールド位置:", obj.getWorldPosition(new THREE.Vector3()));
       }
       
       if (obj.isSkinnedMesh && obj.skeleton) {
         console.log("SkinnedMeshのスケルトンを発見:", obj.name);
+        // console.log("  SkinnedMesh位置:", obj.position.x, obj.position.y, obj.position.z);
+        // console.log("  Skeleton bones数:", obj.skeleton.bones.length);
+        
+        // スケルトンのバウンディングボックスを確認（修正完了により無効化）
+        // const skeletonBox = new THREE.Box3().setFromObject(obj);
+        // console.log("  SkinnedMeshバウンディング:", skeletonBox.min, skeletonBox.max);
+        
         const helper = new THREE.SkeletonHelper(obj);
         helper.material.linewidth = 2;
+        
+        // SkeletonHelperのフラスタムカリングを無効化（バウンディングボックス異常による消失問題の修正）
+        helper.frustumCulled = false;
+        
         this.scene.add(helper);
         skeletonFound = true;
+        
+        // SkeletonHelperのバウンディングボックスも確認（修正完了により無効化）
+        // const helperBox = new THREE.Box3().setFromObject(helper);
+        // console.log("  SkeletonHelperバウンディング:", helperBox.min, helperBox.max);
       }
       else if (obj.isBone && (!obj.parent || !obj.parent.isBone)) {
         console.log("ルートボーンを発見:", obj.name);
         const helper = new THREE.SkeletonHelper(obj);
         helper.material.linewidth = 2;
+        
+        // SkeletonHelperのフラスタムカリングを無効化（バウンディングボックス異常による消失問題の修正）
+        helper.frustumCulled = false;
+        
         this.scene.add(helper);
         skeletonFound = true;
       }
@@ -329,6 +363,43 @@ export class FBXLoaderSystem {
       if (window.updateTimeDisplay) {
         window.updateTimeDisplay();
       }
+      
+      // デバッグ: アニメーション中のボーン位置変化を監視（修正完了により無効化）
+      // this.debugAnimationEffect();
+    }
+  }
+
+  debugAnimationEffect() {
+    // 900フレームに1回だけ（軽量化）
+    if (!this.animDebugCounter) this.animDebugCounter = 0;
+    this.animDebugCounter++;
+    
+    if (this.animDebugCounter % 900 === 0 && this.currentFBXObject) {
+      console.log("=== アニメーション中のSkeletonHelper解析 ===");
+      
+      // SkeletonHelperの現在のバウンディングボックスを確認
+      this.scene.traverse((obj) => {
+        if (obj.type === 'SkeletonHelper') {
+          const helperBox = new THREE.Box3().setFromObject(obj);
+          console.log("アニメーション中SkeletonHelperバウンディング:", helperBox.min, "to", helperBox.max);
+          console.log("サイズ:", helperBox.getSize(new THREE.Vector3()));
+          
+          // SkeletonHelperの各ボーンの現在位置をチェック
+          if (obj.skeleton && obj.skeleton.bones) {
+            console.log("ボーン数:", obj.skeleton.bones.length);
+            obj.skeleton.bones.forEach((bone, index) => {
+              if (index < 5) { // 最初の5つのボーンのみ表示
+                const worldPos = bone.getWorldPosition(new THREE.Vector3());
+                console.log(`ボーン${index} (${bone.name || 'unnamed'}) ワールド位置:`, worldPos);
+              }
+            });
+          }
+        }
+      });
+      
+      // 現在のFBXオブジェクト全体のバウンディングボックス
+      const fbxBox = new THREE.Box3().setFromObject(this.currentFBXObject);
+      console.log("FBXオブジェクト全体バウンディング:", fbxBox.min, "to", fbxBox.max);
     }
   }
 

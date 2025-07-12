@@ -153,6 +153,9 @@ export class App {
     if (infoDiv && this.camera) {
       const height = this.camera.position.y.toFixed(2);
       
+      // デバッグ: オブジェクトの可視性チェック（修正完了により無効化）
+      // this.debugVisibility();
+      
       // 既存の要素があるかチェック
       let recordStatus = document.getElementById('recordStatus');
       let recordTime = document.getElementById('recordTime');
@@ -175,6 +178,46 @@ export class App {
           heightText.textContent = `v1.2.0 - カメラ高さ: ${height}m`;
         }
       }
+    }
+  }
+
+  debugVisibility() {
+    // フレーム毎の表示は重いので、300フレームに1回だけ
+    if (!this.visibilityFrameCounter) this.visibilityFrameCounter = 0;
+    this.visibilityFrameCounter++;
+    
+    if (this.visibilityFrameCounter % 300 === 0 && this.fbxLoader && this.fbxLoader.currentFBXObject) {
+      const fbxObject = this.fbxLoader.currentFBXObject;
+      const camera = this.camera;
+      
+      // カメラの Frustum を作成
+      const frustum = new THREE.Frustum();
+      const cameraMatrix = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      frustum.setFromProjectionMatrix(cameraMatrix);
+      
+      // FBXオブジェクトのバウンディングボックス
+      const boundingBox = new THREE.Box3().setFromObject(fbxObject);
+      
+      // フラスタムカリングのテスト
+      const isVisible = frustum.intersectsBox(boundingBox);
+      
+      console.log("=== フラスタムカリング解析 ===");
+      console.log("カメラ位置:", camera.position);
+      console.log("FBXオブジェクト位置:", fbxObject.position);
+      console.log("バウンディングボックス:", boundingBox.min, "to", boundingBox.max);
+      console.log("バウンディングボックスサイズ:", boundingBox.getSize(new THREE.Vector3()));
+      console.log("フラスタム内に存在:", isVisible);
+      console.log("オブジェクト可視状態:", fbxObject.visible);
+      
+      // SkeletonHelperの確認
+      this.scene.traverse((obj) => {
+        if (obj.type === 'SkeletonHelper') {
+          const helperBox = new THREE.Box3().setFromObject(obj);
+          const helperVisible = frustum.intersectsBox(helperBox);
+          console.log("SkeletonHelper可視状態:", obj.visible, "フラスタム内:", helperVisible);
+          console.log("SkeletonHelperバウンディング:", helperBox.min, "to", helperBox.max);
+        }
+      });
     }
   }
 }
