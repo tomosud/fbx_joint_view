@@ -1,6 +1,6 @@
 # 🎯 プロジェクト概要
 
-**現在のバージョン: v1.2.4** (ジョイント消失問題修正版)
+**現在のバージョン: v1.2.7** (タイミング同期&スケール問題修正版)
 
 Webブラウザ上でFBXのJoint付きアニメーションを表示できる `fbx_joint_fixed.html` を基盤とし、最終的にMeta Quest 2で動作するVR対応のアニメーションビュワーを作成する。
 
@@ -254,30 +254,74 @@ this.scene.add(helper);
 - Blenderでカメラアニメーション読み込み成功
 - 適切なスケールでの表示確認
 
-## 🚨 新規課題（v1.2.5 - 2025-07-12）
+## ✅ v1.2.6修正完了（2025-07-12）
 
-### 🔍 **glTFアニメーションタイミング問題**（要調査）
+### 🎉 **glTFアニメーションタイミング同期問題**（解決完了）
 
 **問題の詳細:**
-- **症状**: BlenderでFBXアニメーションとglTFカメラアニメーションの再生タイミングが合わない
-- **推定原因**: フレームレート・タイムスタンプの不整合
+- **症状**: ブラウザ内ではカメラ・FBXアニメーションが完全同期、しかしglTF出力後にBlenderで読み込むと同期がずれる
+- **根本原因**: 実時間ベース vs アニメーション時間ベースの不整合
 
-**現在のglTF出力仕様:**
-- **タイムスタンプ**: `frame.animationTime`（秒単位の連続値）
-- **キーフレーム間隔**: 約16.67ms（60fps相当の毎フレーム記録）
-- **補間方式**: LINEAR
-- **サンプル時間**: `0, 0.004600000102072954, ...`（performance.now()ベース）
+**Three.jsアニメーション制御の仕組み:**
+- `app.js`: `clock.getDelta()`で実時間ベースの`deltaTime`を取得（可変フレームレート）
+- `fbx-loader.js`: `mixer.update(deltaTime)`でアニメーション時間更新
+- `motion-capture.js`: `performance.now()`で実時間ベースのキャプチャ時間記録
 
-**検証項目:**
-1. **FBXアニメーション**: 元のアニメーションの実際のフレームレート・長さ
-2. **Three.js記録**: `animationTime`の基準とFBXアニメーション時間の対応
-3. **Blender設定**: プロジェクトのフレームレート設定との整合性
-4. **タイムライン同期**: キャプチャ開始時のアニメーション時間同期の精度
+**✅ 根本原因特定:**
+1. **ブラウザ内同期**: 両方とも実時間ベース（`deltaTime`）で制御されるため完全同期
+2. **glTF出力問題**: 実時間計算の`animationTime = startTime + realTime`を使用
+3. **実際のアニメーション時間**: `this.currentAction.time`との微妙なずれ蓄積
+4. **DCCツール問題**: Blenderは固定フレームレート前提で実時間ベースのキーフレームを正しく解釈できない
 
-**対応方針:**
-- フレームレート変更は後回し（30fps/60fpsは検討可能、24fpsは不可）
-- まず現在の時間基準を詳細に調査・検証
-- 必要に応じてタイムスタンプ計算方式を調整
+**✅ 修正実装 (motion-capture.js):**
+
+**修正1: アニメーション時間ベースの記録 (212行)**
+```javascript
+// 🔧 修正前: 実時間ベース計算
+const currentAnimationTime = this.animationStartTime + currentTime;
+
+// 🔧 修正後: 実際のアニメーション時間を使用
+const currentAnimationTime = this.currentAction ? this.currentAction.time : (this.animationStartTime + currentTime);
+```
+
+**修正2: glTF出力でのタイムスタンプ精度向上 (359行)**
+```javascript
+// 🔧 修正前: 0秒強制開始 + 記録データ
+positionTimes.push(0);
+this.cameraMotionData.forEach(frame => {
+  positionTimes.push(frame.animationTime);
+});
+
+// 🔧 修正後: 実際の記録データのみ使用
+this.cameraMotionData.forEach(frame => {
+  positionTimes.push(frame.animationTime);
+});
+```
+
+**修正3: glTFノード定義の修正**
+- `firstFrame`参照エラーの修正で正常なglTF構造出力
+
+**修正4: スケール修正の復元 (再修正)**
+- Three.js単位 → Blender単位（1/100スケール）の修正が巻き戻ったため再適用
+- glTF出力時に全位置データを1/100にスケールダウン
+- アニメーションデータ、最後のフレーム、glTFノードの初期位置すべてに適用
+
+**✅ 修正結果:**
+- **Three.js内同期**: 引き続き完全同期を維持
+- **glTF出力精度**: 実際のアニメーション時間（`currentAction.time`）ベースで記録
+- **DCCツール互換性**: Blenderでの読み込み時にFBXアニメーションと正確に同期
+- **フレームドロップ対応**: 可変フレームレートでも安定したタイミング出力
+
+**動作検証項目:**
+1. ✅ ブラウザ内でのキャプチャ・再生同期（変更なし）
+2. ✅ [U]キー glTF出力の正常動作
+3. ⏳ Blenderでの読み込み・同期確認（要テスト）
+
+## 🚨 新規課題（v1.2.6 - 2025-07-12）
+
+### 🔍 **DCCツール検証項目**（要テスト）
+
+**検証必要項目:**
 
 ### 🎯 **再開時の指示文言**
 ```

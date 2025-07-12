@@ -209,7 +209,8 @@ export class MotionCapture {
     // カメラモーション記録
     if (this.isRecording) {
       const currentTime = (performance.now() - this.recordStartTime) / 1000;
-      const currentAnimationTime = this.animationStartTime + currentTime;
+      // 🔧 修正: 実際のアニメーション時間を使用してタイミング同期を改善
+      const currentAnimationTime = this.currentAction ? this.currentAction.time : (this.animationStartTime + currentTime);
       
       this.cameraMotionData.push({
         time: currentTime,
@@ -218,7 +219,7 @@ export class MotionCapture {
         quaternion: this.camera.quaternion.clone()
       });
       
-      this.recordTime.textContent = `${currentTime.toFixed(1)}s`;
+      this.recordTime.textContent = `${currentTime.toFixed(1)}s (anim: ${currentAnimationTime.toFixed(1)})`;
       
       // キャプチャ中の動的カメラ表示を更新
       this.updateCurrentCameraVisualization(this.camera.position, this.camera.quaternion);
@@ -358,17 +359,11 @@ export class MotionCapture {
     const quaternionTimes = [];
     const quaternionValues = [];
     
-    // 最初のフレーム（0秒時点）
-    const firstFrame = this.cameraMotionData[0];
-    positionTimes.push(0);
-    positionValues.push(firstFrame.position.x, firstFrame.position.y, firstFrame.position.z);
-    quaternionTimes.push(0);
-    quaternionValues.push(firstFrame.quaternion.x, firstFrame.quaternion.y, firstFrame.quaternion.z, firstFrame.quaternion.w);
-    
-    // 記録されたフレーム
+    // 🔧 修正: 実際の記録データのタイムスタンプをそのまま使用（0秒強制を廃止）
+    // 🔧 スケール修正: Three.js単位 → Blender単位（1/100スケール）
     this.cameraMotionData.forEach(frame => {
       positionTimes.push(frame.animationTime);
-      positionValues.push(frame.position.x, frame.position.y, frame.position.z);
+      positionValues.push(frame.position.x / 100, frame.position.y / 100, frame.position.z / 100);
       
       quaternionTimes.push(frame.animationTime);
       quaternionValues.push(frame.quaternion.x, frame.quaternion.y, frame.quaternion.z, frame.quaternion.w);
@@ -378,7 +373,7 @@ export class MotionCapture {
     const lastFrame = this.cameraMotionData[this.cameraMotionData.length - 1];
     if (totalDuration > lastFrame.animationTime) {
       positionTimes.push(totalDuration);
-      positionValues.push(lastFrame.position.x, lastFrame.position.y, lastFrame.position.z);
+      positionValues.push(lastFrame.position.x / 100, lastFrame.position.y / 100, lastFrame.position.z / 100);
       quaternionTimes.push(totalDuration);
       quaternionValues.push(lastFrame.quaternion.x, lastFrame.quaternion.y, lastFrame.quaternion.z, lastFrame.quaternion.w);
     }
@@ -402,6 +397,7 @@ export class MotionCapture {
     }
     
     // 手動でglTF形式のJSONを構築（DCCツール互換性向上）
+    const firstFrame = this.cameraMotionData[0];
     const gltfData = {
       asset: {
         version: "2.0",
@@ -415,9 +411,9 @@ export class MotionCapture {
         name: "CameraMotion",
         camera: 0,
         translation: [
-          firstFrame.position.x,
-          firstFrame.position.y, 
-          firstFrame.position.z
+          firstFrame.position.x / 100,
+          firstFrame.position.y / 100, 
+          firstFrame.position.z / 100
         ],
         rotation: [
           firstFrame.quaternion.x,
