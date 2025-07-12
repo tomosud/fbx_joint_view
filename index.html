@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <title>FBX Camera Motion Capture</title>
+  <style>
+    body {margin:0; overflow:hidden;}
+    #crosshair {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      pointer-events: none;
+      display: none;
+    }
+    #crosshair::before,
+    #crosshair::after {
+      content: '';
+      position: absolute;
+      background: white;
+    }
+    #crosshair::before {
+      left: 50%;
+      top: 0;
+      width: 2px;
+      height: 100%;
+      transform: translateX(-50%);
+    }
+    #crosshair::after {
+      top: 50%;
+      left: 0;
+      height: 2px;
+      width: 100%;
+      transform: translateY(-50%);
+    }
+  </style>
+</head>
+<body>
+<div id="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-family: Arial, sans-serif; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;">
+  FBXファイルを読み込み中...
+</div>
+<div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 12px; max-width: 300px;">
+  初期化中...
+</div>
+
+<!-- ファイルインポートUI -->
+<div id="fileImport" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif;">
+  <div style="margin-bottom: 10px; font-size: 14px; font-weight: bold;">FBXファイル読み込み</div>
+  <input type="file" id="fbxFileInput" accept=".fbx" style="margin-bottom: 10px; color: white; background: rgba(255,255,255,0.1); border: 1px solid #555; border-radius: 3px; padding: 5px;">
+  
+  <!-- 座標系変換チェックボックス -->
+  <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+    <input type="checkbox" id="convertToYUp" checked style="margin: 0;">
+    <label for="convertToYUp" style="font-size: 12px; cursor: pointer;">Z-up → Y-up 変換</label>
+  </div>
+  
+  <button id="loadBtn" style="display: block; width: 100%; padding: 8px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;" disabled>ファイルを読み込み</button>
+</div>
+
+<!-- カメラ制御UI -->
+<div id="cameraControls" style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif;">
+  <div style="margin-bottom: 10px; text-align: center; font-weight: bold;">カメラ制御</div>
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <button id="orbitBtn" style="padding: 8px 15px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">軌道カメラ</button>
+    <button id="fpsBtn" style="padding: 8px 15px; background: #555; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">FPSカメラ</button>
+  </div>
+  <div style="margin-top: 10px; font-size: 11px; color: #ccc; text-align: center;">
+    FPS: クリックでロック、WASD移動、マウス視点操作
+  </div>
+</div>
+
+<!-- キャプチャ制御UI -->
+<div id="captureControls" style="position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif; display: none;">
+  <div style="margin-bottom: 10px; text-align: center; font-weight: bold;">カメラモーションキャプチャ</div>
+  <div style="display: flex; gap: 10px; align-items: center; justify-content: center;">
+    <button id="recordBtn" style="padding: 8px 20px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;">● 記録開始</button>
+    <button id="stopBtn" style="padding: 8px 20px; background: #555; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;" disabled>■ 停止</button>
+    <button id="exportBtn" style="padding: 8px 20px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;" disabled>📥 glTF出力</button>
+  </div>
+  <div style="margin-top: 8px; text-align: center;">
+    <span id="recordStatus" style="font-size: 11px; color: #ccc;">待機中</span>
+    <span id="recordTime" style="font-size: 11px; color: #ccc; margin-left: 10px;">0.0s</span>
+  </div>
+</div>
+
+<!-- アニメーション制御UI -->
+<div id="controls" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif; display: none; width: 600px;">
+  <div style="margin-bottom: 10px; text-align: center;">
+    <button id="playPauseBtn" style="margin: 0 5px; padding: 8px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; min-width: 80px;">▶ 再生</button>
+    <button id="resetBtn" style="margin: 0 5px; padding: 8px 15px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">⏮ リセット</button>
+  </div>
+  <div style="display: flex; align-items: center; gap: 15px; justify-content: center;">
+    <span style="font-size: 12px; min-width: 35px;">時間:</span>
+    <input type="range" id="timeSlider" min="0" max="100" value="0" style="width: 400px;">
+    <span id="timeDisplay" style="font-size: 12px; min-width: 80px;">0.0 / 0.0s</span>
+  </div>
+  <div style="margin-top: 8px; display: flex; align-items: center; gap: 15px; justify-content: center;">
+    <span style="font-size: 12px; min-width: 35px;">速度:</span>
+    <input type="range" id="speedSlider" min="0.1" max="3" step="0.1" value="1" style="width: 400px;">
+    <span id="speedDisplay" style="font-size: 12px; min-width: 35px;">1.0x</span>
+  </div>
+</div>
+
+<div id="crosshair"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+
+const infoDiv = document.getElementById('info');
+const loadingDiv = document.getElementById('loading');
+const crosshair = document.getElementById('crosshair');
+
+function updateInfo(message) {
+  console.log(message);
+  infoDiv.innerHTML = message;
+}
+
+function hideLoading() {
+  loadingDiv.style.display = 'none';
+}
+
+function showError(message) {
+  hideLoading();
+  const errorDiv = document.createElement('div');
+  errorDiv.style.position = 'absolute';
+  errorDiv.style.top = '50%';
+  errorDiv.style.left = '50%';
+  errorDiv.style.transform = 'translate(-50%, -50%)';
+  errorDiv.style.color = 'red';
+  errorDiv.style.backgroundColor = 'rgba(0,0,0,0.9)';
+  errorDiv.style.padding = '20px';
+  errorDiv.style.fontFamily = 'monospace';
+  errorDiv.style.borderRadius = '10px';
+  errorDiv.style.maxWidth = '80%';
+  errorDiv.innerHTML = `<strong>エラー:</strong> ${message}`;
+  document.body.appendChild(errorDiv);
+}
+
+try {
+  updateInfo("Three.js初期化中...");
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x202020);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 10000);
+  camera.position.set(300, 200, 500);
+
+  const renderer = new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  updateInfo("レンダラー初期化完了");
+
+  // カメラ制御システム
+  let currentControlMode = 'orbit'; // 'orbit' or 'fps'
+  let orbitControls, fpsControls;
+  
+  // OrbitControls初期化
+  orbitControls = new OrbitControls(camera, renderer.domElement);
+  orbitControls.mouseButtons = {
+    LEFT: THREE.MOUSE.ROTATE,
+    MIDDLE: THREE.MOUSE.PAN,
+    RIGHT: THREE.MOUSE.DOLLY
+  };
+  orbitControls.enableDamping = true;
+  orbitControls.dampingFactor = 0.05;
+  orbitControls.screenSpacePanning = false;
+
+  // PointerLockControls初期化
+  fpsControls = new PointerLockControls(camera, document.body);
+  
+  // FPS移動制御
+  const moveState = {
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    up: false,
+    down: false
+  };
+  
+  const moveSpeed = 100; // 移動速度
+  
+  document.addEventListener('keydown', (event) => {
+    if (currentControlMode !== 'fps') return;
+    
+    switch (event.code) {
+      case 'KeyW': moveState.forward = true; break;
+      case 'KeyS': moveState.backward = true; break;
+      case 'KeyA': moveState.left = true; break;
+      case 'KeyD': moveState.right = true; break;
+      case 'Space': moveState.up = true; break;
+      case 'ShiftLeft': moveState.down = true; break;
+    }
+  });
+  
+  document.addEventListener('keyup', (event) => {
+    if (currentControlMode !== 'fps') return;
+    
+    switch (event.code) {
+      case 'KeyW': moveState.forward = false; break;
+      case 'KeyS': moveState.backward = false; break;
+      case 'KeyA': moveState.left = false; break;
+      case 'KeyD': moveState.right = false; break;
+      case 'Space': moveState.up = false; break;
+      case 'ShiftLeft': moveState.down = false; break;
+    }
+  });
+
+  // カメラ切り替え機能
+  const orbitBtn = document.getElementById('orbitBtn');
+  const fpsBtn = document.getElementById('fpsBtn');
+
+  function switchToOrbit() {
+    currentControlMode = 'orbit';
+    fpsControls.unlock();
+    orbitControls.enabled = true;
+    crosshair.style.display = 'none';
+    orbitBtn.style.background = '#4CAF50';
+    fpsBtn.style.background = '#555';
+    document.getElementById('captureControls').style.display = 'none';
+  }
+
+  function switchToFPS() {
+    currentControlMode = 'fps';
+    orbitControls.enabled = false;
+    crosshair.style.display = 'block';
+    orbitBtn.style.background = '#555';
+    fpsBtn.style.background = '#4CAF50';
+    document.getElementById('captureControls').style.display = 'block';
+  }
+
+  orbitBtn.addEventListener('click', switchToOrbit);
+  fpsBtn.addEventListener('click', () => {
+    switchToFPS();
+    fpsControls.lock();
+  });
+
+  // Escキーでポインターロック解除
+  document.addEventListener('keydown', (event) => {
+    if (event.code === 'Escape' && currentControlMode === 'fps') {
+      switchToOrbit();
+    }
+  });
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+
+  // 地面のグリッドを追加
+  const gridHelper = new THREE.GridHelper(1000, 100, 0x888888, 0x444444);
+  scene.add(gridHelper);
+
+  // テスト用キューブを追加
+  const testGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const testMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+  const testCube = new THREE.Mesh(testGeometry, testMaterial);
+  scene.add(testCube);
+
+  updateInfo("基本シーン設定完了、FBXファイル読み込み開始...");
+
+  let mixer;
+  let currentFBXObject = null;
+  let currentAction = null;
+  const loader = new FBXLoader();
+
+  // カメラモーションキャプチャ
+  let isRecording = false;
+  let recordStartTime = 0;
+  let cameraMotionData = [];
+  const recordBtn = document.getElementById('recordBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const recordStatus = document.getElementById('recordStatus');
+  const recordTime = document.getElementById('recordTime');
+
+  function startRecording() {
+    if (currentControlMode !== 'fps') return;
+    
+    isRecording = true;
+    recordStartTime = performance.now();
+    cameraMotionData = [];
+    
+    recordBtn.disabled = true;
+    stopBtn.disabled = false;
+    exportBtn.disabled = true;
+    recordStatus.textContent = '記録中...';
+    recordBtn.style.background = '#888';
+    stopBtn.style.background = '#f44336';
+    
+    console.log('カメラモーション記録開始');
+  }
+
+  function stopRecording() {
+    isRecording = false;
+    
+    recordBtn.disabled = false;
+    stopBtn.disabled = true;
+    exportBtn.disabled = false;
+    recordStatus.textContent = `記録完了: ${cameraMotionData.length}フレーム`;
+    recordBtn.style.background = '#f44336';
+    stopBtn.style.background = '#555';
+    exportBtn.style.background = '#2196F3';
+    
+    console.log('カメラモーション記録完了:', cameraMotionData.length, 'フレーム');
+  }
+
+  function exportCameraMotion() {
+    if (cameraMotionData.length === 0) {
+      alert('記録されたカメラモーションがありません');
+      return;
+    }
+
+    // カメラモーションからglTFアニメーションを作成
+    const duration = cameraMotionData[cameraMotionData.length - 1].time;
+    
+    // 位置と回転のトラックを作成
+    const positionTimes = [];
+    const positionValues = [];
+    const quaternionTimes = [];
+    const quaternionValues = [];
+    
+    cameraMotionData.forEach(frame => {
+      positionTimes.push(frame.time);
+      positionValues.push(frame.position.x, frame.position.y, frame.position.z);
+      
+      quaternionTimes.push(frame.time);
+      quaternionValues.push(frame.quaternion.x, frame.quaternion.y, frame.quaternion.z, frame.quaternion.w);
+    });
+
+    // アニメーショントラックを作成
+    const positionTrack = new THREE.VectorKeyframeTrack('.position', positionTimes, positionValues);
+    const rotationTrack = new THREE.QuaternionKeyframeTrack('.quaternion', quaternionTimes, quaternionValues);
+    
+    // アニメーションクリップを作成
+    const clip = new THREE.AnimationClip('CameraMotion', duration, [positionTrack, rotationTrack]);
+    
+    // ダミーオブジェクトを作成してアニメーションを適用
+    const dummyCamera = new THREE.Object3D();
+    dummyCamera.name = 'CameraMotion';
+    scene.add(dummyCamera);
+    
+    // GLTFExporterでエクスポート
+    const exporter = new GLTFExporter();
+    const exportScene = new THREE.Scene();
+    exportScene.add(dummyCamera);
+    exportScene.animations = [clip];
+    
+    exporter.parse(
+      exportScene,
+      (gltf) => {
+        scene.remove(dummyCamera);
+        
+        // ファイルダウンロード
+        const output = JSON.stringify(gltf, null, 2);
+        const blob = new Blob([output], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `camera_motion_${Date.now()}.gltf`;
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        console.log('カメラモーション glTF エクスポート完了');
+      },
+      { animations: [clip] }
+    );
+  }
+
+  recordBtn.addEventListener('click', startRecording);
+  stopBtn.addEventListener('click', stopRecording);
+  exportBtn.addEventListener('click', exportCameraMotion);
+
+  // FBX読み込み関数（既存のコードを流用）
+  function loadFBXFile(fileUrl, fileName = null) {
+    // 既存のオブジェクトとアニメーションをクリア
+    if (currentFBXObject) {
+      scene.remove(currentFBXObject);
+      currentFBXObject = null;
+    }
+    
+    // 既存のスケルトンヘルパーとAxesHelperを削除
+    const objectsToRemove = [];
+    scene.traverse((obj) => {
+      if (obj.type === 'SkeletonHelper' || obj.type === 'AxesHelper') {
+        objectsToRemove.push(obj);
+      }
+    });
+    objectsToRemove.forEach(obj => scene.remove(obj));
+    
+    if (mixer) {
+      mixer.stopAllAction();
+      mixer = null;
+    }
+    if (currentAction) {
+      currentAction = null;
+    }
+
+    // UIを非表示にする
+    document.getElementById('controls').style.display = 'none';
+    
+    updateInfo(`FBX読み込み中... ${fileName || fileUrl}`);
+    console.log("FBXファイルの読み込みを開始:", fileName || fileUrl);
+
+    loader.load(
+      fileUrl,
+    (root) => {
+      hideLoading();
+      console.log("FBXファイルの読み込み完了:", root);
+      console.log("アニメーション数:", root.animations ? root.animations.length : 0);
+      
+      updateInfo(`FBX読み込み完了<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+
+      // 座標系変換（チェックボックスの状態に応じて）
+      const convertToYUp = document.getElementById('convertToYUp').checked;
+      const coordinateSystem = convertToYUp ? 'Y-up (変換適用)' : 'Z-up (元の座標系)';
+      
+      if (convertToYUp) {
+        root.rotation.x = -Math.PI / 2;
+        console.log("Z-up → Y-up変換を適用");
+      } else {
+        root.rotation.x = 0;
+        console.log("元の座標系（Z-up）を維持");
+      }
+      
+      // シーンへ追加
+      scene.add(root);
+      currentFBXObject = root;
+
+      // テストキューブを削除
+      scene.remove(testCube);
+
+      // スケルトンヘルパー処理
+      let skeletonFound = false;
+      let boneCount = 0;
+      
+      root.traverse((obj) => {
+        console.log("オブジェクト:", obj.name, "タイプ:", obj.type, "isBone:", obj.isBone);
+        
+        if (obj.isBone) {
+          boneCount++;
+        }
+        
+        if (obj.isSkinnedMesh && obj.skeleton) {
+          console.log("SkinnedMeshのスケルトンを発見:", obj.name);
+          const helper = new THREE.SkeletonHelper(obj);
+          helper.material.linewidth = 2;
+          scene.add(helper);
+          skeletonFound = true;
+        }
+        else if (obj.isBone && (!obj.parent || !obj.parent.isBone)) {
+          console.log("ルートボーンを発見:", obj.name);
+          const helper = new THREE.SkeletonHelper(obj);
+          helper.material.linewidth = 2;
+          scene.add(helper);
+          skeletonFound = true;
+        }
+      });
+
+      if (!skeletonFound && boneCount > 0) {
+        console.warn("スケルトンヘルパーが作成できませんでした。AxesHelperを代替使用します。");
+        root.traverse((obj) => {
+          if (obj.isBone) {
+            const axesHelper = new THREE.AxesHelper(0.5);
+            obj.add(axesHelper);
+            console.log("ボーンにAxesHelperを追加:", obj.name);
+          }
+        });
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーン: ${boneCount}個（AxesHelper表示）<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+      } else if (skeletonFound) {
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>スケルトン表示中<br>ボーン: ${boneCount}個<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+      } else {
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーンが見つかりません<br>オブジェクト構造をコンソールで確認してください`);
+      }
+
+      // アニメーション再生
+      let animationDuration = 0;
+      
+      if (root.animations && root.animations.length > 0) {
+        console.log("アニメーションを開始:", root.animations[0].name);
+        mixer = new THREE.AnimationMixer(root);
+        currentAction = mixer.clipAction(root.animations[0]);
+        animationDuration = root.animations[0].duration;
+        currentAction.play();
+        
+        // UI制御を表示
+        document.getElementById('controls').style.display = 'block';
+        
+        // アニメーション制御の設定
+        setupAnimationControls(currentAction, animationDuration);
+      } else {
+        console.warn("アニメーションが見つかりませんでした。");
+      }
+
+      // カメラ位置の調整
+      const box = new THREE.Box3().setFromObject(root);
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z);
+      if (maxDim > 0) {
+        camera.position.set(maxDim * 1.5, maxDim * 1.5, maxDim * 1.5);
+        camera.lookAt(box.getCenter(new THREE.Vector3()));
+        orbitControls.reset();
+      }
+      
+      console.log("オブジェクトサイズ:", size);
+      console.log("カメラ位置を調整:", camera.position);
+    },
+    (progress) => {
+      if (progress.total > 0) {
+        const percent = Math.round((progress.loaded / progress.total) * 100);
+        updateInfo(`FBX読み込み中... ${percent}%`);
+        console.log("読み込み進行:", percent + '%');
+      }
+    },
+    (error) => {
+      console.error("FBXファイルの読み込みエラー:", error);
+      showError(`FBXファイルが読み込めません<br>ファイル: ${fileName || fileUrl}<br>詳細: ${error.message || error}`);
+    }
+  );
+  }
+
+  // デフォルトファイルを読み込み
+  loadFBXFile("./your_skeleton.fbx");
+
+  // ファイル選択機能の設定
+  const fbxFileInput = document.getElementById('fbxFileInput');
+  const loadBtn = document.getElementById('loadBtn');
+
+  fbxFileInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file && file.name.toLowerCase().endsWith('.fbx')) {
+      loadBtn.disabled = false;
+      loadBtn.textContent = `${file.name}を読み込み`;
+    } else {
+      loadBtn.disabled = true;
+      loadBtn.textContent = 'ファイルを読み込み';
+    }
+  });
+
+  loadBtn.addEventListener('click', () => {
+    const file = fbxFileInput.files[0];
+    if (file) {
+      const fileUrl = URL.createObjectURL(file);
+      loadFBXFile(fileUrl, file.name);
+    }
+  });
+
+  // 座標系変換チェックボックスのイベントリスナー
+  const convertToYUpCheckbox = document.getElementById('convertToYUp');
+  convertToYUpCheckbox.addEventListener('change', () => {
+    if (currentFBXObject) {
+      const convertToYUp = convertToYUpCheckbox.checked;
+      if (convertToYUp) {
+        currentFBXObject.rotation.x = -Math.PI / 2;
+        console.log("座標系をY-upに変更");
+        updateInfo(`座標系: Y-up (変換適用)<br>ボーン表示中<br>アニメーション: ${currentFBXObject.animations ? currentFBXObject.animations.length : 0}個`);
+      } else {
+        currentFBXObject.rotation.x = 0;
+        console.log("座標系をZ-upに変更");
+        updateInfo(`座標系: Z-up (元の座標系)<br>ボーン表示中<br>アニメーション: ${currentFBXObject.animations ? currentFBXObject.animations.length : 0}個`);
+      }
+    }
+  });
+
+  // アニメーション制御関数
+  function setupAnimationControls(action, duration) {
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const timeSlider = document.getElementById('timeSlider');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedDisplay = document.getElementById('speedDisplay');
+    
+    let isPlaying = true;
+    
+    playPauseBtn.addEventListener('click', () => {
+      if (isPlaying) {
+        action.paused = true;
+        isPlaying = false;
+        playPauseBtn.innerHTML = '▶ 再生';
+        playPauseBtn.style.background = '#4CAF50';
+      } else {
+        action.paused = false;
+        if (!action.isRunning()) {
+          action.play();
+        }
+        isPlaying = true;
+        playPauseBtn.innerHTML = '⏸ 停止';
+        playPauseBtn.style.background = '#ff9800';
+      }
+    });
+    
+    playPauseBtn.innerHTML = '⏸ 停止';
+    playPauseBtn.style.background = '#ff9800';
+    
+    resetBtn.addEventListener('click', () => {
+      action.reset();
+      action.play();
+      isPlaying = true;
+      playPauseBtn.innerHTML = '⏸ 停止';
+      playPauseBtn.style.background = '#ff9800';
+    });
+    
+    timeSlider.max = duration;
+    timeSlider.addEventListener('input', () => {
+      const time = parseFloat(timeSlider.value);
+      action.time = time;
+      if (!isPlaying) {
+        mixer.update(0);
+      }
+    });
+    
+    speedSlider.addEventListener('input', () => {
+      const speed = parseFloat(speedSlider.value);
+      action.setEffectiveTimeScale(speed);
+      speedDisplay.textContent = speed.toFixed(1) + 'x';
+    });
+    
+    window.updateTimeDisplay = () => {
+      if (action) {
+        const currentTime = action.time;
+        timeSlider.value = currentTime;
+        timeDisplay.textContent = `${currentTime.toFixed(1)} / ${duration.toFixed(1)}s`;
+      }
+    };
+  }
+
+  const clock = new THREE.Clock();
+  
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+  
+  function animate() {
+    requestAnimationFrame(animate);
+    
+    const deltaTime = clock.getDelta();
+    
+    if (mixer) {
+      mixer.update(deltaTime);
+      if (window.updateTimeDisplay) {
+        window.updateTimeDisplay();
+      }
+    }
+    
+    // FPS移動制御
+    if (currentControlMode === 'fps' && fpsControls.isLocked) {
+      const moveDistance = moveSpeed * deltaTime;
+      
+      if (moveState.forward) fpsControls.moveForward(moveDistance);
+      if (moveState.backward) fpsControls.moveForward(-moveDistance);
+      if (moveState.left) fpsControls.moveRight(-moveDistance);
+      if (moveState.right) fpsControls.moveRight(moveDistance);
+      if (moveState.up) camera.position.y += moveDistance;
+      if (moveState.down) camera.position.y -= moveDistance;
+      
+      // カメラモーション記録
+      if (isRecording) {
+        const currentTime = (performance.now() - recordStartTime) / 1000;
+        cameraMotionData.push({
+          time: currentTime,
+          position: camera.position.clone(),
+          quaternion: camera.quaternion.clone()
+        });
+        
+        recordTime.textContent = `${currentTime.toFixed(1)}s`;
+      }
+    }
+    
+    if (currentControlMode === 'orbit') {
+      orbitControls.update();
+    }
+    
+    renderer.render(scene, camera);
+  }
+  
+  animate();
+
+} catch (error) {
+  console.error("初期化エラー:", error);
+  showError(`初期化に失敗しました: ${error.message}`);
+}
+</script>
+</body>
+</html>
