@@ -1,25 +1,17 @@
-  {
-    "permissions": {
-      "allow": [
-        "Edit(*)",
-        "Write(*)",
-        "Read(*)",
-        "Delete(*)",
-        "Bash(*)",
-        "Task(*)",
-        "Grep(*)",
-        "Glob(*)"
-      ],
-      "deny": [
-        "Delete(/system/*)"
-      ]
-    },
-    "codeExecution": "always",
-    "bashApproval": "never",
-    "fileOperations": "always",
-    "tools": {
-      "bash": "always",
-      "grep": "always",
-      "glob": "always"
-    }
+{
+  "permissions": {
+    "allow": [
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)",
+      "Delete(*)",
+      "Bash(*)",
+      "Task(*)",
+      "Grep(*)",
+      "Glob(*)"
+    ],
+    "deny": [
+      "Delete(/system/*)"
+    ]
   }
+}

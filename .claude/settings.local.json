@@ -12,24 +12,9 @@
       "Bash(*)",
       "Task(*)",
       "Grep(*)",
-      "Glob(*)"
+      "Glob(*)",
+      "WebFetch(*)",
+      "WebSearch(*)"
     ]
-  },
-  "codeExecution": "always",
-  "bashApproval": "never",
-  "editApproval": "never",
-  "fileOperations": "always",
-  "tools": {
-    "bash": "always",
-    "grep": "always", 
-    "glob": "always",
-    "edit": "always",
-    "write": "always",
-    "read": "always"
-  },
-  "approval": {
-    "edit": "never",
-    "write": "never",
-    "delete": "never"
   }
 }
