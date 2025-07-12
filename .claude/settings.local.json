@@ -2,5 +2,27 @@
   "enabledMcpjsonServers": [
     "playwright"
   ],
-  "enableAllProjectMcpServers": true
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": [
+      "Edit(*)",
+      "Write(*)",
+      "Read(*)",
+      "Delete(*)",
+      "Bash(*)",
+      "Task(*)",
+      "Grep(*)",
+      "Glob(*)"
+    ]
+  },
+  "codeExecution": "always",
+  "bashApproval": "never",
+  "fileOperations": "always",
+  "tools": {
+    "bash": "always",
+    "grep": "always",
+    "glob": "always",
+    "edit": "always",
+    "write": "always"
+  }
 }

@@ -152,8 +152,13 @@ export class App {
     const infoDiv = document.getElementById('info');
     if (infoDiv && this.camera) {
       const height = this.camera.position.y.toFixed(2);
-      const content = infoDiv.innerHTML.split('<br>')[0]; // 最初の行を保持
-      infoDiv.innerHTML = `${content}<br>カメラ高さ: ${height}m`;
+      // recordStatus と recordTime の要素を保持
+      const recordStatus = document.getElementById('recordStatus');
+      const recordTime = document.getElementById('recordTime');
+      const statusText = recordStatus ? recordStatus.textContent : '待機中';
+      const timeText = recordTime ? recordTime.textContent : '0.0s';
+      
+      infoDiv.innerHTML = `v1.2.0 - カメラ高さ: ${height}m<div id="recordStatus" style="margin-top: 5px;">${statusText}</div><div id="recordTime" style="margin-top: 2px;">${timeText}</div>`;
     }
   }
 }

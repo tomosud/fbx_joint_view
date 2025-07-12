@@ -31,7 +31,8 @@ export class MotionCapture {
     document.addEventListener('keydown', (event) => {
       switch (event.code) {
         case 'KeyP': // Play/Stop animation
-          if (window.toggleAnimation) {
+          // キャプチャ中はアニメーション制御をブロック
+          if (!this.isRecording && window.toggleAnimation) {
             window.toggleAnimation();
           }
           event.preventDefault();
@@ -77,9 +78,12 @@ export class MotionCapture {
   }
 
   toggleRecording() {
+    console.log('toggleRecording called, current state:', this.isRecording);
     if (!this.isRecording) {
+      console.log('Starting recording...');
       this.startRecording();
     } else {
+      console.log('Stopping recording...');
       this.stopRecording();
     }
   }
@@ -98,6 +102,9 @@ export class MotionCapture {
   }
 
   startRecording() {
+    console.log('startRecording called');
+    console.log('recordStatus element:', this.recordStatus);
+    
     // ポインターロックが無効な場合は自動で有効にする
     if (!window.cameraControls || !window.cameraControls.isFPSLocked()) {
       if (window.cameraControls) {
@@ -105,20 +112,28 @@ export class MotionCapture {
       }
     }
     
-    // アニメーションを再生開始
-    if (this.currentAction && !this.currentAction.isRunning()) {
-      this.currentAction.play();
-    }
-    if (this.currentAction) {
-      this.currentAction.paused = false;
-    }
-    
     this.isRecording = true;
     this.recordStartTime = performance.now();
     this.animationStartTime = this.currentAction ? this.currentAction.time : 0;
     this.cameraMotionData = [];
     
-    this.recordStatus.textContent = '記録中...';
+    console.log('Setting recordStatus to record');
+    if (this.recordStatus) {
+      this.recordStatus.textContent = 'record';
+      console.log('recordStatus updated to:', this.recordStatus.textContent);
+    } else {
+      console.error('recordStatus element not found!');
+    }
+    
+    // 赤枠表示
+    const recordingFrame = document.getElementById('recordingFrame');
+    console.log('recordingFrame element:', recordingFrame);
+    if (recordingFrame) {
+      recordingFrame.style.display = 'block';
+      console.log('Red frame should be visible');
+    } else {
+      console.error('recordingFrame element not found!');
+    }
     
     console.log('カメラモーション記録開始, アニメーション時間:', this.animationStartTime);
   }
@@ -126,7 +141,13 @@ export class MotionCapture {
   stopRecording() {
     this.isRecording = false;
     
-    this.recordStatus.textContent = `記録完了: ${this.cameraMotionData.length}フレーム`;
+    this.recordStatus.textContent = 'stop';
+    
+    // 赤枠非表示
+    const recordingFrame = document.getElementById('recordingFrame');
+    if (recordingFrame) {
+      recordingFrame.style.display = 'none';
+    }
     
     // カメラの軌跡を可視化
     this.visualizeCameraPath();
@@ -136,7 +157,7 @@ export class MotionCapture {
 
   update(deltaTime) {
     // カメラモーション記録
-    if (this.isRecording && window.cameraControls && window.cameraControls.isFPSLocked()) {
+    if (this.isRecording) {
       const currentTime = (performance.now() - this.recordStartTime) / 1000;
       const currentAnimationTime = this.animationStartTime + currentTime;
       
