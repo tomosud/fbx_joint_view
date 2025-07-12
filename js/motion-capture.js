@@ -125,6 +125,14 @@ export class MotionCapture {
       }
     }
     
+    // アニメーションが停止中の場合は自動で再生開始
+    if (this.currentAction && this.currentAction.paused) {
+      console.log('アニメーション停止中のため自動再生開始');
+      if (window.toggleAnimation) {
+        window.toggleAnimation();
+      }
+    }
+    
     this.isRecording = true;
     this.recordStartTime = performance.now();
     this.animationStartTime = this.currentAction ? this.currentAction.time : 0;

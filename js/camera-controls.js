@@ -59,15 +59,30 @@ export class CameraControls {
       }
     });
 
-    // Escキーでポインターロック解除（一時的）
+    // Escキーでポインターロック解除・復帰切り替え
     document.addEventListener('keydown', (event) => {
       if (event.code === 'Escape') {
-        this.unlockPointer();
-        // 3秒後に自動で再ロック（カメラ再生中でなければ）
-        setTimeout(() => {
-          this.maintainPointerLock();
-        }, 3000);
+        if (this.fpsControls.isLocked) {
+          this.unlockPointer();
+          console.log('Escape: ポインターロック解除');
+        } else {
+          this.lockPointer();
+          console.log('Escape: ポインターロック復帰');
+        }
         event.preventDefault();
+      }
+    });
+
+    // 画面クリックでポインターロック復帰（UI要素を除外）
+    document.addEventListener('click', (event) => {
+      // UI要素（スライダーなど）を除外
+      const isUIElement = event.target.closest('#timeSliderContainer') || 
+                         event.target.closest('#info') ||
+                         event.target.closest('#shortcutGuide') ||
+                         event.target.id === 'timeSlider';
+      
+      if (!this.fpsControls.isLocked && !isUIElement) {
+        this.lockPointer();
       }
     });
 
@@ -82,7 +97,10 @@ export class CameraControls {
   }
 
   setupUI() {
-    // UIセットアップは不要（自動でFPSモード開始）
+    // UI透明度制御用の要素を取得
+    this.infoDiv = document.getElementById('info');
+    this.shortcutGuide = document.getElementById('shortcutGuide');
+    this.timeSliderContainer = document.getElementById('timeSliderContainer');
   }
 
   startFPS() {
@@ -92,8 +110,10 @@ export class CameraControls {
     document.addEventListener('pointerlockchange', () => {
       if (document.pointerLockElement === document.body) {
         console.log('ポインターロック開始');
+        this.setUIOpacity(0.1); // ポインターロック時は透明度を薄く
       } else {
         console.log('ポインターロック解除');
+        this.setUIOpacity(0.7); // 解除時は元の透明度に戻す
       }
     });
     
@@ -145,5 +165,27 @@ export class CameraControls {
 
   isFPSLocked() {
     return this.fpsControls && this.fpsControls.isLocked;
+  }
+
+  // UI透明度制御
+  setUIOpacity(opacity) {
+    const elements = [this.infoDiv, this.shortcutGuide, this.timeSliderContainer];
+    elements.forEach(element => {
+      if (element) {
+        // 現在の背景色から透明度のみを変更
+        const currentStyle = window.getComputedStyle(element);
+        const backgroundColor = currentStyle.backgroundColor;
+        
+        // rgba形式に変換して透明度を設定
+        if (backgroundColor.includes('rgba')) {
+          element.style.backgroundColor = backgroundColor.replace(/[\d\.]+\)$/g, `${opacity})`);
+        } else if (backgroundColor.includes('rgb')) {
+          const rgbValues = backgroundColor.match(/\d+/g);
+          if (rgbValues && rgbValues.length >= 3) {
+            element.style.backgroundColor = `rgba(${rgbValues[0]}, ${rgbValues[1]}, ${rgbValues[2]}, ${opacity})`;
+          }
+        }
+      }
+    });
   }
 }
