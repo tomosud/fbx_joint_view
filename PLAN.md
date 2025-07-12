@@ -1,10 +1,10 @@
 # 🎯 プロジェクト概要
 
-**現在のバージョン: v1.2.7** (タイミング同期&スケール問題修正版)
+**現在のバージョン: v1.3.2 ✅完了** (Maya対応JSON出力システム - アニメーション範囲保持)
 
 Webブラウザ上でFBXのJoint付きアニメーションを表示できる `fbx_joint_fixed.html` を基盤とし、最終的にMeta Quest 2で動作するVR対応のアニメーションビュワーを作成する。
 
-カメラ操作とアニメーションキャプチャ機能を段階的に実装し、glTFまたはJSON形式で出力可能とする。
+カメラ操作とアニメーションキャプチャ機能を段階的に実装し、Maya対応JSON形式で出力可能とする。
 
 index.htmlを作成し、エントリポイントとすること。
 fbx_joint_fixed.htmlは変更せず、今までの通り動くことを確認する。
@@ -20,7 +20,7 @@ fbx_joint_fixed.htmlは変更せず、今までの通り動くことを確認す
 - [x] index.htmlエントリポイント作成
 - [x] FPSカメラ操作の実装（three.jsベース、PointerLockControls使用）
 - [x] カメラ位置・回転の毎フレーム記録
-- [x] glTFでのカメラアニメーション書き出し
+- [x] JSON形式でのカメラアニメーション書き出し
 - [x] カメラ制御UI（軌道↔FPS切り替え、記録操作）
 - [x] キーボードショートカット実装（C: カメラ切り替え、R: 録画開始/停止）
 - [x] アニメーション時間軸同期（アニメ全尺に対応したカメラモーション出力）
@@ -39,13 +39,13 @@ fbx_joint_fixed.htmlは変更せず、今までの通り動くことを確認す
 
 ---
 
-# 🎮 現在の操作仕様（キーボードショートカット専用）
+# 🎮 v1.3.0 操作仕様（キーボードショートカット専用）
 
 ## ⌨️ キーボードショートカット
 - **[P]** アニメーション再生/停止
 - **[O]** カメラキャプチャ開始/停止
 - **[I]** カメラ再生/停止
-- **[U]** glTF出力
+- **[U]** Maya用JSON出力
 - **[K]** 座標系切り替え（Z-up ↔ Y-up）
 - **[L]** FBXファイル読み込み
 - **[Esc]** ポインターロック一時解除（3秒後に自動復帰）
@@ -81,7 +81,7 @@ js/
 - **Three.js 0.163.0** ES6モジュール構成
 - **FBXLoader** 3Dモデル読み込み
 - **PointerLockControls** FPSカメラ操作
-- **GLTFExporter** カメラアニメーション出力
+- **JSON形式カメラアニメーション出力** Maya対応
 - **AnimationMixer** キャラクターアニメーション制御
 - **リアルタイムモーションキャプチャ** タイムライン同期
 - **3D可視化** カメラパスのワイヤーフレーム表示
@@ -430,6 +430,188 @@ v1.2.0での状況：
    - カメラロケータ表示・アニメーション機能
    - キャプチャ再生時のロケータ非表示機能
 
+## 🚨 glTF出力問題と新方針（v1.2.7 - 2025-07-12）
+
+### 🔴 **glTF出力の限界と問題**
+**現状の問題:**
+- ブラウザ内では完全同期するが、glTF出力後にDCCツールで読み込むと同期がずれる
+- Three.jsの実時間ベースアニメーション vs DCCツールの固定フレームレート前提の不整合
+- GLTFExporterの仕様限界とDCCツール間の互換性問題
+- 複雑なタイミング調整が必要で根本的な解決が困難
+
+### 🎯 **新方針: Maya対応JSON出力システム（v1.3.0）**
+
+**✅ 実装方針変更理由:**
+1. **確実性**: glTFの複雑な仕様より、シンプルなJSON + Maya Pythonで確実な互換性
+2. **制御性**: フレーム単位での完全制御が可能
+3. **Maya特化**: 最終目標がMaya読み込みのため、Maya APIに最適化
+4. **デバッグ性**: JSONで可読性が高く、問題の特定・修正が容易
+
+**📋 新実装仕様:**
+- **出力形式**: JSON（.jsonファイル）
+- **フレーム基準**: 0フレームを基準とした60フレーム（1秒間 @ 60fps）
+- **座標系**: Maya標準（Y-up, 右手座標系）
+- **出力データ**:
+  ```json
+  {
+    "metadata": {
+      "version": "1.0",
+      "frameRate": 60,
+      "totalFrames": 60,
+      "startFrame": 0,
+      "endFrame": 59
+    },
+    "camera": {
+      "aspectRatio": 1.778,
+      "yfov": 50.0,
+      "animation": [
+        {
+          "frame": 0,
+          "position": [x, y, z],
+          "rotation": [rx, ry, rz],
+          "timestamp": 0.0
+        }
+        // ... 60フレーム分
+      ]
+    }
+  }
+  ```
+
+---
+
+# 🛠️ v1.3.0 実装計画: Maya対応JSON出力システム
+
+## 📁 修正ファイル構成
+```
+js/
+└── motion-capture.js      # 修正: glTF出力→JSON出力に置き換え
+maya-importer.py           # 新規: Maya用Pythonインポーター（プロジェクトルート）
+```
+
+## 🎯 実装ステップ
+
+### ✅ Step 1: JSON出力システム（motion-capture.js修正）
+- [ ] **既存glTF出力機能の削除**
+  - exportCameraMotion()メソッドの完全置き換え
+  - GLTFExporter import文の削除
+  - [U]キーのハンドラをJSON出力に変更
+
+- [ ] **フレームベース記録システム**
+  - 60fps固定での記録（実時間 → フレーム変換）
+  - 0フレーム基準での正規化
+  - currentAction.timeの正確なフレーム同期
+
+- [ ] **Maya座標系変換**
+  - Three.js座標系（Y-up右手） → Maya座標系（Y-up右手）
+  - 必要に応じた軸変換・スケール調整
+  - 回転の角度単位変換（ラジアン → 度）
+
+- [ ] **カメラ属性出力**
+  - aspectRatio: カメラのアスペクト比
+  - yfov: 垂直視野角（度数）
+  - 位置・回転の60フレーム分データ
+
+- [ ] **JSON出力処理**
+  - 仕様に準拠したJSONファイル生成
+  - ダウンロード機能の実装
+
+### ✅ Step 2: Maya Pythonインポーター（maya-importer.py）
+- [ ] **JSON読み込み機能**
+  - ファイル選択UI
+  - JSON解析・バリデーション
+  - エラーハンドリング
+
+- [ ] **Maya カメラ作成・アニメーション**
+  - カメラオブジェクトの生成
+  - キーフレームアニメーション設定
+  - アスペクト比・FOV設定
+
+- [ ] **タイムライン設定**
+  - Maya タイムラインの開始・終了フレーム設定
+  - フレームレート設定（60fps）
+  - アニメーション再生準備
+
+- [ ] **スクリプト実行方法**
+  - Maya Script Editor での実行手順
+  - ファイルパス指定方法
+  - 実行エラー対処法
+
+### ✅ Step 3: 動作検証・テスト
+- [ ] **エンドツーエンドテスト**
+  - ブラウザでカメラキャプチャ
+  - [U]キーでJSON出力
+  - MayaでPython実行
+  - カメラアニメーション確認
+
+- [ ] **同期精度検証**
+  - FBXアニメーション vs カメラアニメーション
+  - フレーム単位での正確性確認
+  - タイミングずれの最小化
+
+## 🎮 更新後の操作仕様
+
+### ⌨️ 更新されるショートカットキー
+- **[U]** Maya用JSON出力（glTF出力から変更）
+
+### 📱 UI表示更新
+- **ショートカットガイド**: [U]キーの説明をJSON出力に変更
+- **出力ステータス**: JSON出力成功・失敗メッセージ
+
+## 🔧 技術実装詳細
+
+### Maya座標系対応
+```javascript
+// Three.js → Maya 座標変換
+function convertToMayaCoordinates(position, rotation) {
+  return {
+    position: [position.x, position.y, position.z], // Y-up維持
+    rotation: [
+      rotation.x * 180 / Math.PI,  // ラジアン → 度
+      rotation.y * 180 / Math.PI,
+      rotation.z * 180 / Math.PI
+    ]
+  };
+}
+```
+
+### フレーム正規化
+```javascript
+// 実時間 → 60fpsフレーム変換
+function normalizeToFrames(animationTime, totalDuration) {
+  const frameRate = 60;
+  const totalFrames = 60;
+  const frame = Math.floor((animationTime / totalDuration) * totalFrames);
+  return Math.min(frame, totalFrames - 1);
+}
+```
+
+### Maya Python API使用例
+```python
+import maya.cmds as cmds
+import json
+
+def import_camera_animation(json_file_path):
+    # JSONデータ読み込み
+    with open(json_file_path, 'r') as f:
+        data = json.load(f)
+    
+    # カメラ作成
+    camera = cmds.camera()
+    camera_transform = camera[0]
+    camera_shape = camera[1]
+    
+    # アニメーション設定
+    for frame_data in data['camera']['animation']:
+        frame = frame_data['frame']
+        pos = frame_data['position']
+        rot = frame_data['rotation']
+        
+        cmds.setKeyframe(camera_transform, 
+                        attribute='translateX', 
+                        time=frame, value=pos[0])
+        # ... 他の属性も同様
+```
+
 ---
 
 # ⏳ 将来の実装予定
@@ -437,16 +619,85 @@ v1.2.0での状況：
 ## ステップ2：VR対応（Meta Quest 2）
 - [ ] WebXRベースのVR空間対応
 - [ ] VR内でのカメラ操作UI
-- [ ] カメラトラック記録・保存（記録形式/操作方法は要検討）
+- [ ] カメラトラック記録・保存（JSON形式対応）
 
 ## ステップ3：FBX差し替え対応
 - [ ] ユーザーによるFBX差し替えUI（Quest対応方法は要検討）
 
+## ステップ4：DCCツール拡張対応
+- [ ] Blender用Pythonアドオン（JSON読み込み）
+- [ ] 3ds Max用MaxScript（JSON読み込み）
+- [ ] Cinema 4D用スクリプト（JSON読み込み）
+
 ---
 
-# 📌 備考
-- 書き出しは `.gltf` 形式
-- Quest2では録画より「トラック記録→再生」のアプローチを採用予定
+# 🎯 v1.3.0 実装指示（Claude Code用）
+
+## 💬 Claude Code再開時の指示文言:
+```
+PLAN.mdを読んで、v1.3.0 Maya対応JSON出力システムを実装して。
+
+## 🎯 実装内容
+glTF出力の同期問題を解決するため、Maya専用JSON出力システムに完全移行する。
+
+## 📋 作業内容
+
+### ✅ Step 1: motion-capture.js修正
+1. **既存glTF機能の完全削除**
+   - `exportCameraMotion()` メソッドを JSON出力に完全置き換え
+   - GLTFExporter import文を削除
+   - [U]キーハンドラをJSON出力に変更
+
+2. **JSON出力システム実装**
+   - 60fps固定、0フレーム基準の60フレーム出力
+   - Maya座標系対応（Y-up右手、ラジアン→度変換）
+   - カメラ属性出力：aspectRatio, yfov
+   - フレーム同期：currentAction.timeベース
+
+### ✅ Step 2: maya-importer.py作成
+- プロジェクトルート（/mnt/c/work/script/fbx_joint_view/）に配置
+- Maya Python API使用のカメラインポーター
+- JSON読み込み・カメラ作成・キーフレーム設定機能
+
+## 📋 JSON出力仕様
+```json
+{
+  "metadata": {
+    "version": "1.0",
+    "frameRate": 60,
+    "totalFrames": 60,
+    "startFrame": 0,
+    "endFrame": 59
+  },
+  "camera": {
+    "aspectRatio": 1.778,
+    "yfov": 50.0,
+    "animation": [
+      {
+        "frame": 0,
+        "position": [x, y, z],
+        "rotation": [rx, ry, rz],
+        "timestamp": 0.0
+      }
+      // ... 60フレーム分
+    ]
+  }
+}
+```
+
+## 🔧 技術要件
+- Three.js座標系 → Maya座標系変換
+- 実時間 → 60fpsフレーム正規化
+- 回転：ラジアン → 度変換
+- [U]キーでcamera_animation.jsonダウンロード
+
+まず現在のmotion-capture.jsを確認して、段階的に実装を進めて。
+```
+
+---
+- **新方針**: Maya対応JSON出力に完全移行
+- **フレーム精度**: 60fps固定で完全な同期を保証
+- **Maya特化**: Maya Pythonスクリプトで確実なカメラインポート
 - three.jsを中心に構成
 - GitHub Pages静的ホスティング対応
 - コードは400行/ファイル程度で分割管理

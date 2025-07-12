@@ -342,223 +342,91 @@ export class MotionCapture {
     return this.isPlayingBack;
   }
 
-  async exportCameraMotion() {
+  exportCameraMotion() {
     if (this.cameraMotionData.length === 0) {
       alert('記録されたカメラモーションがありません');
       return;
     }
 
-    const { GLTFExporter } = await import('three/addons/exporters/GLTFExporter.js');
-
-    // アニメーション全体の長さを使用
-    const totalDuration = this.animationDuration > 0 ? this.animationDuration : this.cameraMotionData[this.cameraMotionData.length - 1].animationTime;
-    
-    // 位置と回転のトラックを作成
-    const positionTimes = [];
-    const positionValues = [];
-    const quaternionTimes = [];
-    const quaternionValues = [];
-    
-    // 🔧 修正: 実際の記録データのタイムスタンプをそのまま使用（0秒強制を廃止）
-    // 🔧 スケール修正: Three.js単位 → Blender単位（1/100スケール）
-    this.cameraMotionData.forEach(frame => {
-      positionTimes.push(frame.animationTime);
-      positionValues.push(frame.position.x / 100, frame.position.y / 100, frame.position.z / 100);
-      
-      quaternionTimes.push(frame.animationTime);
-      quaternionValues.push(frame.quaternion.x, frame.quaternion.y, frame.quaternion.z, frame.quaternion.w);
-    });
-    
-    // 最後のフレーム（全体の終了時点）
-    const lastFrame = this.cameraMotionData[this.cameraMotionData.length - 1];
-    if (totalDuration > lastFrame.animationTime) {
-      positionTimes.push(totalDuration);
-      positionValues.push(lastFrame.position.x / 100, lastFrame.position.y / 100, lastFrame.position.z / 100);
-      quaternionTimes.push(totalDuration);
-      quaternionValues.push(lastFrame.quaternion.x, lastFrame.quaternion.y, lastFrame.quaternion.z, lastFrame.quaternion.w);
-    }
-
-    // アニメーショントラックを作成（ノード名.プロパティ形式）
-    const positionTrack = new THREE.VectorKeyframeTrack('CameraMotion.position', positionTimes, positionValues);
-    const rotationTrack = new THREE.QuaternionKeyframeTrack('CameraMotion.quaternion', quaternionTimes, quaternionValues);
-    
-    // アニメーションクリップを作成
-    const clip = new THREE.AnimationClip('CameraMotion', totalDuration, [positionTrack, rotationTrack]);
-    
-    // Three.js Cameraオブジェクトを作成してアニメーションを適用
-    const exportCamera = new THREE.PerspectiveCamera(75, 16/9, 0.1, 30000);
-    exportCamera.name = 'CameraMotion';
-    
-    // 初期位置・回転を設定
-    if (this.cameraMotionData.length > 0) {
-      const firstFrame = this.cameraMotionData[0];
-      exportCamera.position.copy(firstFrame.position);
-      exportCamera.quaternion.copy(firstFrame.quaternion);
-    }
-    
-    // 手動でglTF形式のJSONを構築（DCCツール互換性向上）
+    // アニメーション時間ベースの60fps出力（アニメ範囲を保持）
+    const frameRate = 60;
     const firstFrame = this.cameraMotionData[0];
-    const gltfData = {
-      asset: {
-        version: "2.0",
-        generator: "FBX Joint Viewer Camera Motion Export"
+    const lastFrame = this.cameraMotionData[this.cameraMotionData.length - 1];
+    
+    // アニメーション時間での範囲を取得
+    const animStartTime = firstFrame.animationTime;
+    const animEndTime = lastFrame.animationTime;
+    const animDuration = animEndTime - animStartTime;
+    
+    // Mayaフレーム範囲を計算（アニメ時間をフレームに変換）
+    const startFrame = Math.floor(animStartTime * frameRate);
+    const endFrame = Math.floor(animEndTime * frameRate);
+    const totalFrames = endFrame - startFrame + 1;
+    
+    const jsonData = {
+      metadata: {
+        version: "1.0",
+        frameRate: frameRate,
+        totalFrames: totalFrames,
+        startFrame: startFrame,
+        endFrame: endFrame
       },
-      scenes: [{
-        nodes: [0]
-      }],
-      scene: 0,
-      nodes: [{
-        name: "CameraMotion",
-        camera: 0,
-        translation: [
-          firstFrame.position.x / 100,
-          firstFrame.position.y / 100, 
-          firstFrame.position.z / 100
-        ],
-        rotation: [
-          firstFrame.quaternion.x,
-          firstFrame.quaternion.y,
-          firstFrame.quaternion.z,
-          firstFrame.quaternion.w
-        ]
-      }],
-      cameras: [{
-        type: "perspective",
-        perspective: {
-          aspectRatio: 16/9,
-          yfov: 1.3089969389957472,
-          zfar: 30000,
-          znear: 0.1
-        },
-        name: "CameraMotion"
-      }],
-      animations: [{
-        name: "CameraMotion",
-        channels: [
-          {
-            sampler: 0,
-            target: {
-              node: 0,
-              path: "translation"
-            }
-          },
-          {
-            sampler: 1,
-            target: {
-              node: 0,
-              path: "rotation"
-            }
-          }
-        ],
-        samplers: [
-          {
-            input: 0,
-            output: 1,
-            interpolation: "LINEAR"
-          },
-          {
-            input: 0,
-            output: 2,
-            interpolation: "LINEAR"
-          }
-        ]
-      }],
-      accessors: [
-        {
-          bufferView: 0,
-          componentType: 5126,
-          count: positionTimes.length,
-          type: "SCALAR",
-          max: [Math.max(...positionTimes)],
-          min: [Math.min(...positionTimes)]
-        },
-        {
-          bufferView: 1,
-          componentType: 5126,
-          count: positionTimes.length,
-          type: "VEC3"
-        },
-        {
-          bufferView: 2,
-          componentType: 5126,
-          count: quaternionTimes.length,
-          type: "VEC4"
-        }
-      ],
-      bufferViews: [
-        {
-          buffer: 0,
-          byteOffset: 0,
-          byteLength: positionTimes.length * 4
-        },
-        {
-          buffer: 0,
-          byteOffset: positionTimes.length * 4,
-          byteLength: positionValues.length * 4
-        },
-        {
-          buffer: 0,
-          byteOffset: positionTimes.length * 4 + positionValues.length * 4,
-          byteLength: quaternionValues.length * 4
-        }
-      ],
-      buffers: [{
-        byteLength: (positionTimes.length + positionValues.length + quaternionValues.length) * 4,
-        uri: "data:application/octet-stream;base64," + this.createBinaryData(positionTimes, positionValues, quaternionValues)
-      }]
+      camera: {
+        aspectRatio: this.camera.aspect || 1.778, // 16:9
+        yfov: THREE.MathUtils.radToDeg(this.camera.fov * Math.PI / 180) || 50.0, // FOVを度に変換
+        animation: []
+      }
     };
+
+    // アニメーション時間範囲内のデータを生成
+    for (let currentFrame = startFrame; currentFrame <= endFrame; currentFrame++) {
+      const animationTime = currentFrame / frameRate;
+      const targetFrame = this.findFrameAtAnimationTime(animationTime);
+      
+      if (targetFrame) {
+        // Three.js座標系からMaya座標系に変換
+        // Three.js: Y-up右手 → Maya: Y-up右手 (座標系は同じ、単位変換のみ)
+        const position = [
+          targetFrame.position.x / 100, // Three.js単位 → Maya単位（1/100スケール）
+          targetFrame.position.y / 100,
+          targetFrame.position.z / 100
+        ];
+        
+        // クォータニオンからオイラー角に変換（度）
+        const euler = new THREE.Euler().setFromQuaternion(targetFrame.quaternion, 'XYZ');
+        const rotation = [
+          THREE.MathUtils.radToDeg(euler.x),
+          THREE.MathUtils.radToDeg(euler.y),
+          THREE.MathUtils.radToDeg(euler.z)
+        ];
+        
+        jsonData.camera.animation.push({
+          frame: currentFrame,
+          position: position,
+          rotation: rotation,
+          timestamp: animationTime
+        });
+      }
+    }
     
-    console.log('手動構築glTFデータ:', gltfData);
-    
-    // ファイルダウンロード
-    const output = JSON.stringify(gltfData, null, 2);
+    // JSONファイルダウンロード
+    const output = JSON.stringify(jsonData, null, 2);
     const blob = new Blob([output], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     
     const link = document.createElement('a');
     link.href = url;
-    link.download = `camera_motion_${Date.now()}.gltf`;
+    link.download = 'camera_animation.json';
     link.click();
     
     URL.revokeObjectURL(url);
-    console.log(`カメラモーション glTF エクスポート完了: ${totalDuration.toFixed(1)}秒, ${this.cameraMotionData.length}フレーム`);
+    console.log(`カメラモーション JSON エクスポート完了: フレーム${startFrame}-${endFrame} (${totalFrames}フレーム@${frameRate}fps, ${animDuration.toFixed(1)}秒)`);
   }
 
   hasRecordedData() {
     return this.cameraMotionData.length > 0;
   }
 
-  // バイナリデータをBase64エンコードして作成
-  createBinaryData(times, positions, rotations) {
-    const totalLength = times.length + positions.length + rotations.length;
-    const buffer = new ArrayBuffer(totalLength * 4);
-    const view = new Float32Array(buffer);
-    
-    let offset = 0;
-    
-    // タイムスタンプデータ
-    for (let i = 0; i < times.length; i++) {
-      view[offset++] = times[i];
-    }
-    
-    // 位置データ
-    for (let i = 0; i < positions.length; i++) {
-      view[offset++] = positions[i];
-    }
-    
-    // 回転データ
-    for (let i = 0; i < rotations.length; i++) {
-      view[offset++] = rotations[i];
-    }
-    
-    // ArrayBufferをBase64に変換
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
-  }
 
   // カメラパスの可視化
   visualizeCameraPath() {
