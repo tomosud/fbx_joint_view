@@ -11,8 +11,7 @@ export class MotionCapture {
     this.animationDuration = 0;
     this.currentAction = null;
     
-    this.recordStatus = document.getElementById('recordStatus');
-    this.recordTime = document.getElementById('recordTime');
+    this.refreshElements();
     
     // カメラ表示用のオブジェクト配列
     this.cameraVisualizationObjects = [];
@@ -24,6 +23,20 @@ export class MotionCapture {
     this.originalCameraQuaternion = new THREE.Quaternion();
     
     this.setupEventListeners();
+  }
+
+  // DOM要素の再取得メソッド
+  refreshElements() {
+    console.log('refreshElements called');
+    this.recordStatus = document.getElementById('recordStatus');
+    this.recordTime = document.getElementById('recordTime');
+    
+    if (!this.recordStatus) {
+      console.error('recordStatus element not found during refresh');
+    }
+    if (!this.recordTime) {
+      console.error('recordTime element not found during refresh');
+    }
   }
 
   setupEventListeners() {
@@ -141,7 +154,12 @@ export class MotionCapture {
   stopRecording() {
     this.isRecording = false;
     
-    this.recordStatus.textContent = 'stop';
+    // DOM要素参照を更新してから操作
+    this.refreshElements();
+    
+    if (this.recordStatus) {
+      this.recordStatus.textContent = 'stop';
+    }
     
     // 赤枠非表示
     const recordingFrame = document.getElementById('recordingFrame');

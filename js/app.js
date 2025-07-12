@@ -152,13 +152,29 @@ export class App {
     const infoDiv = document.getElementById('info');
     if (infoDiv && this.camera) {
       const height = this.camera.position.y.toFixed(2);
-      // recordStatus と recordTime の要素を保持
-      const recordStatus = document.getElementById('recordStatus');
-      const recordTime = document.getElementById('recordTime');
-      const statusText = recordStatus ? recordStatus.textContent : '待機中';
-      const timeText = recordTime ? recordTime.textContent : '0.0s';
       
-      infoDiv.innerHTML = `v1.2.0 - カメラ高さ: ${height}m<div id="recordStatus" style="margin-top: 5px;">${statusText}</div><div id="recordTime" style="margin-top: 2px;">${timeText}</div>`;
+      // 既存の要素があるかチェック
+      let recordStatus = document.getElementById('recordStatus');
+      let recordTime = document.getElementById('recordTime');
+      
+      if (!recordStatus || !recordTime) {
+        // 要素が存在しない場合のみ再作成
+        const statusText = recordStatus ? recordStatus.textContent : '待機中';
+        const timeText = recordTime ? recordTime.textContent : '0.0s';
+        
+        infoDiv.innerHTML = `v1.2.0 - カメラ高さ: ${height}m<div id="recordStatus" style="margin-top: 5px;">${statusText}</div><div id="recordTime" style="margin-top: 2px;">${timeText}</div>`;
+        
+        // motionCaptureに要素の再取得を通知
+        if (window.motionCapture) {
+          window.motionCapture.refreshElements();
+        }
+      } else {
+        // 要素が存在する場合は高さ情報のみ更新
+        const heightText = infoDiv.firstChild;
+        if (heightText && heightText.nodeType === Node.TEXT_NODE) {
+          heightText.textContent = `v1.2.0 - カメラ高さ: ${height}m`;
+        }
+      }
     }
   }
 }
