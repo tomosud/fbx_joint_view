@@ -25,6 +25,9 @@ export class MotionCapture {
     // プレイ時の動的カメラ表示用
     this.currentCameraVisualization = null;
     
+    // 以前キャプチャのアニメーション用
+    this.isAnimatingStaticCameras = false;
+    
     this.setupEventListeners();
   }
 
@@ -50,6 +53,12 @@ export class MotionCapture {
           // キャプチャ中はアニメーション制御をブロック
           if (!this.isRecording && window.toggleAnimation) {
             window.toggleAnimation();
+            // アニメーション再生時に以前キャプチャしたカメラをアニメーション
+            if (this.currentAction && !this.currentAction.paused) {
+              this.startStaticCameraAnimation();
+            } else {
+              this.stopStaticCameraAnimation();
+            }
           }
           event.preventDefault();
           break;
@@ -141,6 +150,12 @@ export class MotionCapture {
     this.animationStartTime = this.currentAction ? this.currentAction.time : 0;
     this.cameraMotionData = [];
     
+    // 以前キャプチャしたカメラ表示を非表示
+    this.hideCameraVisualization();
+    
+    // キャプチャ中の動的カメラ表示を作成
+    this.createCurrentCameraVisualization();
+    
     console.log('Setting recordStatus to record');
     if (this.recordStatus) {
       this.recordStatus.textContent = 'record';
@@ -178,8 +193,14 @@ export class MotionCapture {
       recordingFrame.style.display = 'none';
     }
     
+    // キャプチャ中の動的カメラ表示を削除
+    this.removeCurrentCameraVisualization();
+    
     // カメラの軌跡を可視化
     this.visualizeCameraPath();
+    
+    // 通常時は以前キャプチャしたカメラを表示（停止状態）
+    this.showCameraVisualization();
     
     console.log('カメラモーション記録完了:', this.cameraMotionData.length, 'フレーム');
   }
@@ -198,6 +219,14 @@ export class MotionCapture {
       });
       
       this.recordTime.textContent = `${currentTime.toFixed(1)}s`;
+      
+      // キャプチャ中の動的カメラ表示を更新
+      this.updateCurrentCameraVisualization(this.camera.position, this.camera.quaternion);
+    }
+
+    // 以前キャプチャしたカメラのアニメーション更新
+    if (this.isAnimatingStaticCameras && this.currentAction && this.cameraMotionData.length > 0) {
+      this.updateStaticCameraAnimation();
     }
 
     // カメラモーション再生
@@ -277,6 +306,9 @@ export class MotionCapture {
       this.currentAction.paused = false;
     }
     
+    // 以前キャプチャしたカメラ表示を非表示
+    this.hideCameraVisualization();
+    
     // プレイ時の動的カメラ表示を作成
     this.createCurrentCameraVisualization();
     
@@ -292,6 +324,9 @@ export class MotionCapture {
     
     // 動的カメラ表示を削除
     this.removeCurrentCameraVisualization();
+    
+    // 通常時は以前キャプチャしたカメラを表示（停止状態）
+    this.showCameraVisualization();
     
     // ポインターロックを維持（ショートカットキー専用のため）
     if (window.cameraControls && !window.cameraControls.isFPSLocked()) {
@@ -451,14 +486,105 @@ export class MotionCapture {
     this.cameraVisualizationObjects = [];
   }
 
+  // カメラ可視化を非表示（削除せずに隠す）
+  hideCameraVisualization() {
+    this.cameraVisualizationObjects.forEach(obj => {
+      obj.visible = false;
+    });
+  }
+
+  // カメラ可視化を表示
+  showCameraVisualization() {
+    this.cameraVisualizationObjects.forEach(obj => {
+      obj.visible = true;
+    });
+  }
+
+  // 以前キャプチャしたカメラのアニメーション開始
+  startStaticCameraAnimation() {
+    if (this.cameraMotionData.length === 0) return;
+    
+    this.isAnimatingStaticCameras = true;
+    this.showCameraVisualization();
+    console.log('以前キャプチャしたカメラのアニメーション開始');
+  }
+
+  // 以前キャプチャしたカメラのアニメーション停止
+  stopStaticCameraAnimation() {
+    this.isAnimatingStaticCameras = false;
+    this.showCameraVisualization(); // 停止状態で表示
+    console.log('以前キャプチャしたカメラのアニメーション停止');
+  }
+
+  // 以前キャプチャしたカメラのアニメーション更新
+  updateStaticCameraAnimation() {
+    if (!this.currentAction || this.cameraMotionData.length === 0) return;
+    
+    const currentAnimationTime = this.currentAction.time;
+    
+    // アニメーション時間に対応するカメラフレームを検索
+    const targetFrame = this.findFrameAtAnimationTime(currentAnimationTime);
+    
+    if (targetFrame) {
+      // 静的カメラ表示オブジェクトの中から代表的なものを動かす
+      // ここでは最初のコーンを動的に動かす（間引き表示の最初のもの）
+      const step = Math.max(1, Math.floor(this.cameraMotionData.length / 20));
+      const movingCameraIndex = Math.floor(this.cameraVisualizationObjects.length / 2); // 中央付近のコーン
+      
+      if (this.cameraVisualizationObjects[movingCameraIndex]) {
+        const movingCamera = this.cameraVisualizationObjects[movingCameraIndex];
+        movingCamera.position.copy(targetFrame.position);
+        movingCamera.quaternion.copy(targetFrame.quaternion);
+        movingCamera.rotateX(Math.PI / 2); // 向き修正
+        
+        // 動いているカメラを色で区別（黄色）
+        if (movingCamera.material) {
+          movingCamera.material.color.setHex(0xffff00);
+        }
+      }
+    }
+  }
+
+  // アニメーション時間でフレームを検索
+  findFrameAtAnimationTime(animationTime) {
+    if (this.cameraMotionData.length === 0) return null;
+    
+    // アニメーション時間に最も近いフレームを検索
+    for (let i = 0; i < this.cameraMotionData.length - 1; i++) {
+      const currentFrame = this.cameraMotionData[i];
+      const nextFrame = this.cameraMotionData[i + 1];
+      
+      if (animationTime >= currentFrame.animationTime && animationTime <= nextFrame.animationTime) {
+        const t = (animationTime - currentFrame.animationTime) / (nextFrame.animationTime - currentFrame.animationTime);
+        
+        return {
+          position: new THREE.Vector3().lerpVectors(currentFrame.position, nextFrame.position, t),
+          quaternion: new THREE.Quaternion().slerpQuaternions(currentFrame.quaternion, nextFrame.quaternion, t),
+          animationTime: animationTime
+        };
+      }
+    }
+    
+    // 範囲外の場合は最初または最後のフレームを返す
+    if (animationTime <= this.cameraMotionData[0].animationTime) {
+      return this.cameraMotionData[0];
+    } else {
+      return this.cameraMotionData[this.cameraMotionData.length - 1];
+    }
+  }
+
   // プレイ時の動的カメラ表示を作成
   createCurrentCameraVisualization() {
+    // 既存の動的カメラ表示があれば削除
+    this.removeCurrentCameraVisualization();
+    
     const scene = window.app.scene;
     
-    // 動的カメラのコーンを作成（青色で区別）
+    // 動的カメラのコーンを作成（キャプチャ中は緑色、再生中は青色）
+    const color = this.isRecording ? 0x00ff00 : 0x0088ff;
     const coneGeometry = new THREE.ConeGeometry(0.4, 1.2, 6);
     const coneMaterial = new THREE.MeshBasicMaterial({ 
-      color: 0x0088ff, 
+      color: color, 
       wireframe: true,
       transparent: true,
       opacity: 0.9
@@ -469,7 +595,7 @@ export class MotionCapture {
     this.currentCameraVisualization.rotation.x = Math.PI / 2;
     
     scene.add(this.currentCameraVisualization);
-    console.log('動的カメラ表示を作成');
+    console.log('動的カメラ表示を作成:', this.isRecording ? 'キャプチャ中(緑)' : '再生中(青)');
   }
 
   // 動的カメラ表示を更新
