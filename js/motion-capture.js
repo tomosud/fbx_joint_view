@@ -385,15 +385,15 @@ export class MotionCapture {
       
       if (targetFrame) {
         // Three.js座標系からMaya座標系に変換
-        // Three.js: Y-up右手 → Maya: Y-up右手 (座標系は同じ、単位変換のみ)
+        // Three.js: Y-up右手 → Maya: Y-up右手 (座標系は同じ、スケール調整なし)
         const position = [
-          targetFrame.position.x / 100, // Three.js単位 → Maya単位（1/100スケール）
-          targetFrame.position.y / 100,
-          targetFrame.position.z / 100
+          targetFrame.position.x, // Three.js単位をそのまま使用
+          targetFrame.position.y,
+          targetFrame.position.z
         ];
         
-        // クォータニオンからオイラー角に変換（度）
-        const euler = new THREE.Euler().setFromQuaternion(targetFrame.quaternion, 'XYZ');
+        // クォータニオンからオイラー角に変換（度）- Maya互換の回転順序
+        const euler = new THREE.Euler().setFromQuaternion(targetFrame.quaternion, 'ZYX');
         const rotation = [
           THREE.MathUtils.radToDeg(euler.x),
           THREE.MathUtils.radToDeg(euler.y),
