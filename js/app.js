@@ -1,0 +1,149 @@
+// メインアプリケーション
+import * as THREE from 'three';
+import { CameraControls } from './camera-controls.js';
+import { MotionCapture } from './motion-capture.js';
+import { FBXLoaderSystem } from './fbx-loader.js';
+
+// グローバルTHREEが未定義の場合に設定
+if (typeof window.THREE === 'undefined') {
+  window.THREE = THREE;
+}
+
+export class App {
+  constructor() {
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.clock = null;
+    
+    this.cameraControls = null;
+    this.motionCapture = null;
+    this.fbxLoader = null;
+    
+    this.init();
+  }
+
+  async init() {
+    try {
+      this.updateInfo("Three.js初期化中...");
+
+      // シーン、カメラ、レンダラーの初期化
+      this.scene = new THREE.Scene();
+      this.scene.background = new THREE.Color(0x202020);
+      
+      // カメラのファークリップを300mに設定
+      this.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 30000);
+      this.camera.position.set(300, 200, 500);
+
+      this.renderer = new THREE.WebGLRenderer({antialias:true});
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(this.renderer.domElement);
+
+      this.updateInfo("レンダラー初期化完了");
+
+      // 時計の初期化
+      this.clock = new THREE.Clock();
+
+      // システムの初期化
+      this.cameraControls = new CameraControls(this.camera, this.renderer, this.scene);
+      this.motionCapture = new MotionCapture(this.camera);
+      this.fbxLoader = new FBXLoaderSystem(this.scene, this.camera, this.motionCapture);
+
+      // 非同期初期化の完了を待つ
+      await this.cameraControls.init();
+      await this.fbxLoader.init();
+
+      // グローバルアクセス用
+      window.cameraControls = this.cameraControls;
+      window.motionCapture = this.motionCapture;
+      window.fbxLoader = this.fbxLoader;
+
+      // ライティング
+      this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+
+      // 地面のグリッドを追加
+      const gridHelper = new THREE.GridHelper(1000, 100, 0x888888, 0x444444);
+      this.scene.add(gridHelper);
+
+      // テスト用キューブを追加
+      const testGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const testMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+      const testCube = new THREE.Mesh(testGeometry, testMaterial);
+      testCube.name = 'testCube';
+      this.scene.add(testCube);
+
+      this.updateInfo("基本シーン設定完了、FBXファイル読み込み開始...");
+
+      // リサイズイベント
+      window.addEventListener("resize", () => {
+        this.camera.aspect = window.innerWidth/window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // アニメーションループ開始
+      this.animate();
+
+      // デフォルトファイルを読み込み
+      this.fbxLoader.loadFBXFile("./your_skeleton.fbx");
+
+    } catch (error) {
+      console.error("初期化エラー:", error);
+      this.showError(`初期化に失敗しました: ${error.message}`);
+    }
+  }
+
+  updateInfo(message) {
+    console.log(message);
+    const infoDiv = document.getElementById('info');
+    if (infoDiv) {
+      infoDiv.innerHTML = message;
+    }
+  }
+
+  showError(message) {
+    const loadingDiv = document.getElementById('loading');
+    if (loadingDiv) {
+      loadingDiv.style.display = 'none';
+    }
+    
+    const errorDiv = document.createElement('div');
+    errorDiv.style.position = 'absolute';
+    errorDiv.style.top = '50%';
+    errorDiv.style.left = '50%';
+    errorDiv.style.transform = 'translate(-50%, -50%)';
+    errorDiv.style.color = 'red';
+    errorDiv.style.backgroundColor = 'rgba(0,0,0,0.9)';
+    errorDiv.style.padding = '20px';
+    errorDiv.style.fontFamily = 'monospace';
+    errorDiv.style.borderRadius = '10px';
+    errorDiv.style.maxWidth = '80%';
+    errorDiv.innerHTML = `<strong>エラー:</strong> ${message}`;
+    document.body.appendChild(errorDiv);
+  }
+
+  animate() {
+    requestAnimationFrame(() => this.animate());
+    
+    const deltaTime = this.clock.getDelta();
+    
+    // 各システムの更新
+    if (this.fbxLoader) {
+      this.fbxLoader.update(deltaTime);
+    }
+    
+    if (this.cameraControls) {
+      this.cameraControls.update(deltaTime);
+    }
+    
+    if (this.motionCapture) {
+      this.motionCapture.update(deltaTime);
+    }
+    
+    // レンダリング
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+
+// アプリケーション開始
+new App();

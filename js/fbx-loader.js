@@ -1,0 +1,367 @@
+// FBX読み込みシステム
+import * as THREE from 'three';
+
+export class FBXLoaderSystem {
+  constructor(scene, camera, motionCapture) {
+    this.scene = scene;
+    this.camera = camera;
+    this.motionCapture = motionCapture;
+    this.loader = null;
+    this.mixer = null;
+    this.currentFBXObject = null;
+    this.currentAction = null;
+    
+    this.infoDiv = document.getElementById('info');
+    this.loadingDiv = document.getElementById('loading');
+  }
+
+  async init() {
+    try {
+      const { FBXLoader } = await import('three/addons/loaders/FBXLoader.js');
+      this.loader = new FBXLoader();
+      this.setupUI();
+      console.log('FBXLoader初期化完了');
+    } catch (error) {
+      console.error('FBXLoader初期化エラー:', error);
+      throw error;
+    }
+  }
+
+  setupUI() {
+    // ファイル選択機能の設定
+    const fbxFileInput = document.getElementById('fbxFileInput');
+    const loadBtn = document.getElementById('loadBtn');
+
+    fbxFileInput.addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (file && file.name.toLowerCase().endsWith('.fbx')) {
+        loadBtn.disabled = false;
+        loadBtn.textContent = `${file.name}を読み込み`;
+      } else {
+        loadBtn.disabled = true;
+        loadBtn.textContent = 'ファイルを読み込み';
+      }
+    });
+
+    loadBtn.addEventListener('click', () => {
+      const file = fbxFileInput.files[0];
+      if (file) {
+        const fileUrl = URL.createObjectURL(file);
+        this.loadFBXFile(fileUrl, file.name);
+      }
+    });
+
+    // 座標系変換チェックボックスのイベントリスナー
+    const convertToYUpCheckbox = document.getElementById('convertToYUp');
+    convertToYUpCheckbox.addEventListener('change', () => {
+      if (this.currentFBXObject) {
+        const convertToYUp = convertToYUpCheckbox.checked;
+        if (convertToYUp) {
+          this.currentFBXObject.rotation.x = -Math.PI / 2;
+          console.log("座標系をY-upに変更");
+          this.updateInfo(`座標系: Y-up (変換適用)<br>ボーン表示中<br>アニメーション: ${this.currentFBXObject.animations ? this.currentFBXObject.animations.length : 0}個`);
+        } else {
+          this.currentFBXObject.rotation.x = 0;
+          console.log("座標系をZ-upに変更");
+          this.updateInfo(`座標系: Z-up (元の座標系)<br>ボーン表示中<br>アニメーション: ${this.currentFBXObject.animations ? this.currentFBXObject.animations.length : 0}個`);
+        }
+      }
+    });
+  }
+
+  updateInfo(message) {
+    console.log(message);
+    this.infoDiv.innerHTML = message;
+  }
+
+  hideLoading() {
+    this.loadingDiv.style.display = 'none';
+  }
+
+  showError(message) {
+    this.hideLoading();
+    const errorDiv = document.createElement('div');
+    errorDiv.style.position = 'absolute';
+    errorDiv.style.top = '50%';
+    errorDiv.style.left = '50%';
+    errorDiv.style.transform = 'translate(-50%, -50%)';
+    errorDiv.style.color = 'red';
+    errorDiv.style.backgroundColor = 'rgba(0,0,0,0.9)';
+    errorDiv.style.padding = '20px';
+    errorDiv.style.fontFamily = 'monospace';
+    errorDiv.style.borderRadius = '10px';
+    errorDiv.style.maxWidth = '80%';
+    errorDiv.innerHTML = `<strong>エラー:</strong> ${message}`;
+    document.body.appendChild(errorDiv);
+  }
+
+  loadFBXFile(fileUrl, fileName = null) {
+    if (!this.loader) {
+      console.error('FBXLoader が初期化されていません');
+      this.showError('FBXLoader が初期化されていません。しばらく待ってから再試行してください。');
+      return;
+    }
+
+    // 既存のオブジェクトとアニメーションをクリア
+    if (this.currentFBXObject) {
+      this.scene.remove(this.currentFBXObject);
+      this.currentFBXObject = null;
+    }
+    
+    // 既存のスケルトンヘルパーとAxesHelperを削除
+    const objectsToRemove = [];
+    this.scene.traverse((obj) => {
+      if (obj.type === 'SkeletonHelper' || obj.type === 'AxesHelper') {
+        objectsToRemove.push(obj);
+      }
+    });
+    objectsToRemove.forEach(obj => this.scene.remove(obj));
+    
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer = null;
+    }
+    if (this.currentAction) {
+      this.currentAction = null;
+    }
+
+    // UIを非表示にする
+    document.getElementById('controls').style.display = 'none';
+    
+    this.updateInfo(`FBX読み込み中... ${fileName || fileUrl}`);
+    console.log("FBXファイルの読み込みを開始:", fileName || fileUrl);
+
+    this.loader.load(
+      fileUrl,
+      (root) => this.onLoadComplete(root, fileName),
+      (progress) => this.onLoadProgress(progress),
+      (error) => this.onLoadError(error, fileName, fileUrl)
+    );
+  }
+
+  onLoadComplete(root, fileName) {
+    this.hideLoading();
+    console.log("FBXファイルの読み込み完了:", root);
+    console.log("アニメーション数:", root.animations ? root.animations.length : 0);
+    
+    this.updateInfo(`FBX読み込み完了<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+
+    // 座標系変換
+    const convertToYUp = document.getElementById('convertToYUp').checked;
+    const coordinateSystem = convertToYUp ? 'Y-up (変換適用)' : 'Z-up (元の座標系)';
+    
+    if (convertToYUp) {
+      root.rotation.x = -Math.PI / 2;
+      console.log("Z-up → Y-up変換を適用");
+    } else {
+      root.rotation.x = 0;
+      console.log("元の座標系（Z-up）を維持");
+    }
+    
+    // シーンへ追加
+    this.scene.add(root);
+    this.currentFBXObject = root;
+
+    // テストキューブを削除
+    const testCube = this.scene.getObjectByName('testCube');
+    if (testCube) {
+      this.scene.remove(testCube);
+    }
+
+    // スケルトンヘルパー処理
+    this.setupSkeleton(root, coordinateSystem);
+
+    // アニメーション再生
+    this.setupAnimation(root);
+
+    // カメラ位置の調整
+    this.adjustCameraPosition(root);
+  }
+
+  setupSkeleton(root, coordinateSystem) {
+    let skeletonFound = false;
+    let boneCount = 0;
+    
+    root.traverse((obj) => {
+      console.log("オブジェクト:", obj.name, "タイプ:", obj.type, "isBone:", obj.isBone);
+      
+      if (obj.isBone) {
+        boneCount++;
+      }
+      
+      if (obj.isSkinnedMesh && obj.skeleton) {
+        console.log("SkinnedMeshのスケルトンを発見:", obj.name);
+        const helper = new THREE.SkeletonHelper(obj);
+        helper.material.linewidth = 2;
+        this.scene.add(helper);
+        skeletonFound = true;
+      }
+      else if (obj.isBone && (!obj.parent || !obj.parent.isBone)) {
+        console.log("ルートボーンを発見:", obj.name);
+        const helper = new THREE.SkeletonHelper(obj);
+        helper.material.linewidth = 2;
+        this.scene.add(helper);
+        skeletonFound = true;
+      }
+    });
+
+    if (!skeletonFound && boneCount > 0) {
+      console.warn("スケルトンヘルパーが作成できませんでした。AxesHelperを代替使用します。");
+      root.traverse((obj) => {
+        if (obj.isBone) {
+          const axesHelper = new THREE.AxesHelper(0.5);
+          obj.add(axesHelper);
+          console.log("ボーンにAxesHelperを追加:", obj.name);
+        }
+      });
+      this.updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーン: ${boneCount}個（AxesHelper表示）<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+    } else if (skeletonFound) {
+      this.updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>スケルトン表示中<br>ボーン: ${boneCount}個<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+    } else {
+      this.updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーンが見つかりません<br>オブジェクト構造をコンソールで確認してください`);
+    }
+  }
+
+  setupAnimation(root) {
+    if (root.animations && root.animations.length > 0) {
+      console.log("アニメーションを開始:", root.animations[0].name);
+      this.mixer = new THREE.AnimationMixer(root);
+      this.currentAction = this.mixer.clipAction(root.animations[0]);
+      const animationDuration = root.animations[0].duration;
+      this.currentAction.play();
+      
+      // モーションキャプチャにアニメーション情報を設定
+      this.motionCapture.setAnimationData(this.currentAction, animationDuration);
+      
+      // UI制御を表示
+      document.getElementById('controls').style.display = 'block';
+      
+      // アニメーション制御の設定
+      this.setupAnimationControls(this.currentAction, animationDuration);
+    } else {
+      console.warn("アニメーションが見つかりませんでした。");
+    }
+  }
+
+  setupAnimationControls(action, duration) {
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const timeSlider = document.getElementById('timeSlider');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedDisplay = document.getElementById('speedDisplay');
+    
+    let isPlaying = true;
+    
+    // 既存のイベントリスナーを削除
+    const newPlayPauseBtn = playPauseBtn.cloneNode(true);
+    playPauseBtn.parentNode.replaceChild(newPlayPauseBtn, playPauseBtn);
+    
+    const newResetBtn = resetBtn.cloneNode(true);
+    resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
+    
+    const newTimeSlider = timeSlider.cloneNode(true);
+    timeSlider.parentNode.replaceChild(newTimeSlider, timeSlider);
+    
+    const newSpeedSlider = speedSlider.cloneNode(true);
+    speedSlider.parentNode.replaceChild(newSpeedSlider, speedSlider);
+    
+    // 再生/一時停止ボタン
+    newPlayPauseBtn.addEventListener('click', () => {
+      if (isPlaying) {
+        action.paused = true;
+        isPlaying = false;
+        newPlayPauseBtn.innerHTML = '▶ 再生';
+        newPlayPauseBtn.style.background = '#4CAF50';
+      } else {
+        action.paused = false;
+        if (!action.isRunning()) {
+          action.play();
+        }
+        isPlaying = true;
+        newPlayPauseBtn.innerHTML = '⏸ 停止';
+        newPlayPauseBtn.style.background = '#ff9800';
+      }
+    });
+    
+    newPlayPauseBtn.innerHTML = '⏸ 停止';
+    newPlayPauseBtn.style.background = '#ff9800';
+    
+    // リセットボタン
+    newResetBtn.addEventListener('click', () => {
+      action.reset();
+      action.play();
+      isPlaying = true;
+      newPlayPauseBtn.innerHTML = '⏸ 停止';
+      newPlayPauseBtn.style.background = '#ff9800';
+    });
+    
+    // タイムスライダー
+    newTimeSlider.max = duration;
+    newTimeSlider.addEventListener('input', () => {
+      const time = parseFloat(newTimeSlider.value);
+      action.time = time;
+      if (!isPlaying) {
+        this.mixer.update(0);
+      }
+    });
+    
+    // 速度スライダー
+    newSpeedSlider.addEventListener('input', () => {
+      const speed = parseFloat(newSpeedSlider.value);
+      action.setEffectiveTimeScale(speed);
+      speedDisplay.textContent = speed.toFixed(1) + 'x';
+    });
+    
+    // 時間表示の更新関数
+    window.updateTimeDisplay = () => {
+      if (action) {
+        const currentTime = action.time;
+        newTimeSlider.value = currentTime;
+        timeDisplay.textContent = `${currentTime.toFixed(1)} / ${duration.toFixed(1)}s`;
+      }
+    };
+  }
+
+  adjustCameraPosition(root) {
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    if (maxDim > 0) {
+      this.camera.position.set(maxDim * 1.5, maxDim * 1.5, maxDim * 1.5);
+      this.camera.lookAt(box.getCenter(new THREE.Vector3()));
+      if (window.cameraControls && window.cameraControls.orbitControls) {
+        window.cameraControls.orbitControls.reset();
+      }
+    }
+    
+    console.log("オブジェクトサイズ:", size);
+    console.log("カメラ位置を調整:", this.camera.position);
+  }
+
+  onLoadProgress(progress) {
+    if (progress.total > 0) {
+      const percent = Math.round((progress.loaded / progress.total) * 100);
+      this.updateInfo(`FBX読み込み中... ${percent}%`);
+      console.log("読み込み進行:", percent + '%');
+    }
+  }
+
+  onLoadError(error, fileName, fileUrl) {
+    console.error("FBXファイルの読み込みエラー:", error);
+    this.showError(`FBXファイルが読み込めません<br>ファイル: ${fileName || fileUrl}<br>詳細: ${error.message || error}`);
+  }
+
+  update(deltaTime) {
+    if (this.mixer) {
+      this.mixer.update(deltaTime);
+      if (window.updateTimeDisplay) {
+        window.updateTimeDisplay();
+      }
+    }
+  }
+
+  getCurrentAction() {
+    return this.currentAction;
+  }
+}
