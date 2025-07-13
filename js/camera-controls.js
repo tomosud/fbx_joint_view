@@ -18,8 +18,25 @@ export class CameraControls {
       down: false
     };
     
+    
     this.moveSpeed = 100;
-    this.heightAdjustSpeed = 15.625; // 上下移動速度を5倍に
+    this.heightAdjustSpeed = 23.4375; // 上下移動速度を1.5倍に（15.625 * 1.5）
+    
+    // スムージング設定
+    this.smoothingEnabled = true; // デフォルト有効
+    this.smoothingFactor = 0.25; // 移動平均を0.25秒に変更
+    
+    // スムーズ移動用の目標値と現在値
+    this.targetVelocity = new THREE.Vector3(0, 0, 0);
+    this.currentVelocity = new THREE.Vector3(0, 0, 0);
+    
+    // カメラ回転スムージング用
+    this.lastMouseX = 0;
+    this.lastMouseY = 0;
+    this.mouseVelocityX = 0;
+    this.mouseVelocityY = 0;
+    this.targetMouseVelocityX = 0;
+    this.targetMouseVelocityY = 0;
   }
 
   async init() {
@@ -28,11 +45,33 @@ export class CameraControls {
     // PointerLockControls初期化
     this.fpsControls = new PointerLockControls(this.camera, document.body);
     
+    // スムージング用にマウス移動を手動でキャプチャ
+    this.setupMouseCapture();
+    
     this.setupEventListeners();
     this.setupUI();
     
     // 自動的にFPSモードを開始
     this.startFPS();
+  }
+
+  setupMouseCapture() {
+    // スムージング用のマウス移動キャプチャ
+    document.addEventListener('mousemove', (event) => {
+      if (this.fpsControls.isLocked && this.smoothingEnabled) {
+        // マウス移動量を計算
+        const movementX = event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+        const movementY = event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+        
+        // 目標マウス速度を設定
+        this.targetMouseVelocityX = movementX * 0.002;
+        this.targetMouseVelocityY = movementY * 0.002;
+        
+        // PointerLockControlsの通常の動作を無効化
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    });
   }
 
   setupEventListeners() {
@@ -69,6 +108,13 @@ export class CameraControls {
           this.lockPointer();
           console.log('Escape: ポインターロック復帰');
         }
+        event.preventDefault();
+      }
+      
+      // Jキーでスムージング切り替え
+      if (event.code === 'KeyJ') {
+        this.smoothingEnabled = !this.smoothingEnabled;
+        console.log('カメラスムージング:', this.smoothingEnabled ? '有効' : '無効');
         event.preventDefault();
       }
     });
@@ -148,16 +194,88 @@ export class CameraControls {
   update(deltaTime) {
     // FPS移動制御
     if (this.fpsControls && this.fpsControls.isLocked) {
-      const moveDistance = this.moveSpeed * deltaTime;
-      
-      if (this.moveState.forward) this.fpsControls.moveForward(moveDistance);
-      if (this.moveState.backward) this.fpsControls.moveForward(-moveDistance);
-      if (this.moveState.left) this.fpsControls.moveRight(-moveDistance);
-      if (this.moveState.right) this.fpsControls.moveRight(moveDistance);
-      if (this.moveState.up) this.camera.position.y += this.heightAdjustSpeed * deltaTime;
-      if (this.moveState.down) this.camera.position.y -= this.heightAdjustSpeed * deltaTime;
+      if (this.smoothingEnabled) {
+        // スムーズ移動（指数関数的減衰を使用）
+        this.updateSmoothMovement(deltaTime);
+        this.updateSmoothRotation(deltaTime);
+      } else {
+        // 従来の直接移動
+        this.updateDirectMovement(deltaTime);
+      }
     }
   }
+
+  updateDirectMovement(deltaTime) {
+    const moveDistance = this.moveSpeed * deltaTime;
+    const heightDistance = this.heightAdjustSpeed * deltaTime;
+    
+    if (this.moveState.forward) this.fpsControls.moveForward(moveDistance);
+    if (this.moveState.backward) this.fpsControls.moveForward(-moveDistance);
+    if (this.moveState.left) this.fpsControls.moveRight(-moveDistance);
+    if (this.moveState.right) this.fpsControls.moveRight(moveDistance);
+    if (this.moveState.up) this.camera.position.y += heightDistance;
+    if (this.moveState.down) this.camera.position.y -= heightDistance;
+  }
+
+  updateSmoothMovement(deltaTime) {
+    // 目標速度を設定
+    this.targetVelocity.set(0, 0, 0);
+    
+    const moveSpeed = this.moveSpeed;
+    const heightSpeed = this.heightAdjustSpeed;
+    
+    if (this.moveState.forward) this.targetVelocity.z = moveSpeed;
+    if (this.moveState.backward) this.targetVelocity.z = -moveSpeed;
+    if (this.moveState.left) this.targetVelocity.x = -moveSpeed;
+    if (this.moveState.right) this.targetVelocity.x = moveSpeed;
+    if (this.moveState.up) this.targetVelocity.y = heightSpeed;
+    if (this.moveState.down) this.targetVelocity.y = -heightSpeed;
+    
+    // 指数関数的減衰で現在速度を目標速度に近づける
+    const smoothing = this.smoothingFactor;
+    this.currentVelocity.lerp(this.targetVelocity, smoothing);
+    
+    // カメラを移動
+    const scaledVelocity = this.currentVelocity.clone().multiplyScalar(deltaTime);
+    
+    // 前後左右移動（カメラの向きに相対）
+    if (Math.abs(scaledVelocity.z) > 0.001) {
+      this.fpsControls.moveForward(scaledVelocity.z);
+    }
+    if (Math.abs(scaledVelocity.x) > 0.001) {
+      this.fpsControls.moveRight(scaledVelocity.x);
+    }
+    
+    // 上下移動（ワールド座標）
+    if (Math.abs(scaledVelocity.y) > 0.001) {
+      this.camera.position.y += scaledVelocity.y;
+    }
+  }
+
+  updateSmoothRotation(deltaTime) {
+    // マウス速度をスムーズに減衰
+    this.mouseVelocityX = THREE.MathUtils.lerp(this.mouseVelocityX, this.targetMouseVelocityX, this.smoothingFactor);
+    this.mouseVelocityY = THREE.MathUtils.lerp(this.mouseVelocityY, this.targetMouseVelocityY, this.smoothingFactor);
+    
+    // 回転を適用
+    if (Math.abs(this.mouseVelocityX) > 0.001 || Math.abs(this.mouseVelocityY) > 0.001) {
+      // ヨー回転（水平）
+      const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+      euler.setFromQuaternion(this.camera.quaternion);
+      euler.y -= this.mouseVelocityX;
+      
+      // ピッチ回転（垂直）- 制限付き
+      euler.x -= this.mouseVelocityY;
+      euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
+      
+      this.camera.quaternion.setFromEuler(euler);
+    }
+    
+    // 目標速度を減衰
+    this.targetMouseVelocityX *= 0.8;
+    this.targetMouseVelocityY *= 0.8;
+  }
+
 
   getCurrentMode() {
     return 'fps'; // 常にFPSモード

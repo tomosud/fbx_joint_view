@@ -11,6 +11,12 @@ export class MotionCapture {
     this.animationDuration = 0;
     this.currentAction = null;
     
+    // キャプチャスムージング設定
+    this.captureSmoothing = true; // デフォルト有効
+    this.smoothingFrames = 5; // 移動平均フレーム数
+    this.positionHistory = [];
+    this.quaternionHistory = [];
+    
     this.refreshElements();
     
     // カメラ表示用のオブジェクト配列
@@ -80,6 +86,11 @@ export class MotionCapture {
           break;
         case 'KeyL': // Load FBX
           this.loadFBXFile();
+          event.preventDefault();
+          break;
+        case 'KeyJ': // Toggle capture smoothing
+          this.captureSmoothing = !this.captureSmoothing;
+          console.log('キャプチャスムージング:', this.captureSmoothing ? '有効' : '無効');
           event.preventDefault();
           break;
       }
@@ -212,11 +223,21 @@ export class MotionCapture {
       // 🔧 修正: 実際のアニメーション時間を使用してタイミング同期を改善
       const currentAnimationTime = this.currentAction ? this.currentAction.time : (this.animationStartTime + currentTime);
       
+      let position = this.camera.position.clone();
+      let quaternion = this.camera.quaternion.clone();
+      
+      // スムージングが有効な場合は移動平均を適用
+      if (this.captureSmoothing) {
+        const smoothedData = this.applyCaptureSmoothing(position, quaternion);
+        position = smoothedData.position;
+        quaternion = smoothedData.quaternion;
+      }
+      
       this.cameraMotionData.push({
         time: currentTime,
         animationTime: currentAnimationTime,
-        position: this.camera.position.clone(),
-        quaternion: this.camera.quaternion.clone()
+        position: position,
+        quaternion: quaternion
       });
       
       this.recordTime.textContent = `${currentTime.toFixed(1)}s (anim: ${currentAnimationTime.toFixed(1)})`;
@@ -637,5 +658,35 @@ export class MotionCapture {
       this.currentCameraVisualization = null;
       console.log('動的カメラ表示を削除');
     }
+  }
+
+  // キャプチャスムージング：5フレーム移動平均
+  applyCaptureSmoothing(position, quaternion) {
+    // 履歴に追加
+    this.positionHistory.push(position.clone());
+    this.quaternionHistory.push(quaternion.clone());
+    
+    // 指定フレーム数を超えたら古いデータを削除
+    if (this.positionHistory.length > this.smoothingFrames) {
+      this.positionHistory.shift();
+      this.quaternionHistory.shift();
+    }
+    
+    // 移動平均を計算
+    const avgPosition = new THREE.Vector3();
+    this.positionHistory.forEach(pos => avgPosition.add(pos));
+    avgPosition.divideScalar(this.positionHistory.length);
+    
+    // クォータニオンは球面線形補間で平均化
+    let avgQuaternion = this.quaternionHistory[0].clone();
+    for (let i = 1; i < this.quaternionHistory.length; i++) {
+      const weight = 1.0 / (i + 1);
+      avgQuaternion.slerp(this.quaternionHistory[i], weight);
+    }
+    
+    return {
+      position: avgPosition,
+      quaternion: avgQuaternion
+    };
   }
 }
