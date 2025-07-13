@@ -19,7 +19,7 @@ export class CameraControls {
     };
     
     this.moveSpeed = 100;
-    this.heightAdjustSpeed = 50;
+    this.heightAdjustSpeed = 15.625; // 上下移動速度を5倍に
   }
 
   async init() {
@@ -43,8 +43,8 @@ export class CameraControls {
         case 'KeyS': this.moveState.backward = true; break;
         case 'KeyA': this.moveState.left = true; break;
         case 'KeyD': this.moveState.right = true; break;
-        case 'Space': this.moveState.up = true; break;
-        case 'ShiftLeft': this.moveState.down = true; break;
+        case 'Space': this.moveState.down = true; break;
+        case 'ShiftLeft': this.moveState.up = true; break;
       }
     });
     
@@ -54,8 +54,8 @@ export class CameraControls {
         case 'KeyS': this.moveState.backward = false; break;
         case 'KeyA': this.moveState.left = false; break;
         case 'KeyD': this.moveState.right = false; break;
-        case 'Space': this.moveState.up = false; break;
-        case 'ShiftLeft': this.moveState.down = false; break;
+        case 'Space': this.moveState.down = false; break;
+        case 'ShiftLeft': this.moveState.up = false; break;
       }
     });
 
@@ -154,8 +154,8 @@ export class CameraControls {
       if (this.moveState.backward) this.fpsControls.moveForward(-moveDistance);
       if (this.moveState.left) this.fpsControls.moveRight(-moveDistance);
       if (this.moveState.right) this.fpsControls.moveRight(moveDistance);
-      if (this.moveState.up) this.camera.position.y += moveDistance;
-      if (this.moveState.down) this.camera.position.y -= moveDistance;
+      if (this.moveState.up) this.camera.position.y += this.heightAdjustSpeed * deltaTime;
+      if (this.moveState.down) this.camera.position.y -= this.heightAdjustSpeed * deltaTime;
     }
   }
 
