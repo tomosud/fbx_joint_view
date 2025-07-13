@@ -10,9 +10,15 @@ export class FBXLoaderSystem {
     this.mixer = null;
     this.currentFBXObject = null;
     this.currentAction = null;
+    this.currentFileName = null;
     
     this.infoDiv = document.getElementById('info');
     this.loadingDiv = document.getElementById('loading');
+  }
+
+  // 現在のFBXファイル名を取得
+  getCurrentFileName() {
+    return this.currentFileName;
   }
 
   async init() {
@@ -131,6 +137,7 @@ export class FBXLoaderSystem {
 
   onLoadComplete(root, fileName) {
     this.hideLoading();
+    this.currentFileName = fileName;
     console.log("FBXファイルの読み込み完了:", root);
     console.log("アニメーション数:", root.animations ? root.animations.length : 0);
     

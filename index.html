@@ -61,23 +61,23 @@
 <div id="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-family: Arial, sans-serif; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;">
   FBXファイルを読み込み中...
 </div>
-<div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 12px; max-width: 300px; pointer-events: none; z-index: 1000;">
+<div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 5px; font-size: 18px; max-width: 450px; pointer-events: none; z-index: 1000;">
   v1.2.0 - 初期化中...
-  <div id="recordStatus" style="margin-top: 5px;">待機中</div>
-  <div id="recordTime" style="margin-top: 2px;">0.0s</div>
+  <div id="recordStatus" style="margin-top: 8px;">待機中</div>
+  <div id="recordTime" style="margin-top: 3px;">0.0s</div>
 </div>
 
 <!-- ショートカットガイド -->
-<div id="shortcutGuide" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 12px; border-radius: 8px; color: white; font-family: Arial, sans-serif; width: 200px; pointer-events: none; z-index: 1000;">
-  <div style="margin-bottom: 8px; font-size: 12px; font-weight: bold; text-align: center;">⌨️ ショートカット</div>
-  <div style="font-size: 10px; line-height: 1.4; color: #ddd;">
+<div id="shortcutGuide" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 18px; border-radius: 8px; color: white; font-family: Arial, sans-serif; width: 300px; pointer-events: none; z-index: 1000;">
+  <div style="margin-bottom: 12px; font-size: 18px; font-weight: bold; text-align: center;">⌨️ ショートカット</div>
+  <div style="font-size: 15px; line-height: 1.6; color: #ddd;">
     <div><span style="color: #4CAF50;">[P]</span> 再生/停止</div>
     <div><span style="color: #f44336;">[O]</span> キャプチャ/停止</div>
     <div><span style="color: #2196F3;">[I]</span> カメラ再生/停止</div>
-    <div><span style="color: #ff9800;">[U]</span> glTF出力</div>
+    <div><span style="color: #ff9800;">[U]</span> カメラJSON出力</div>
     <div><span style="color: #9C27B0;">[K]</span> 軸切り替え</div>
     <div><span style="color: #00BCD4;">[L]</span> FBX読み込み</div>
-    <div style="margin-top: 8px; border-top: 1px solid #555; padding-top: 6px;">
+    <div style="margin-top: 12px; border-top: 1px solid #555; padding-top: 9px;">
       <div>WASD移動 | ホイール上下</div>
       <div>[Esc] ポインター解除</div>
     </div>
@@ -88,11 +88,11 @@
 <input type="checkbox" id="convertToYUp" checked style="display: none;">
 
 <!-- 再生ポイントスライダー -->
-<div id="timeSliderContainer" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 8px 20px; border-radius: 8px; color: white; font-family: Arial, sans-serif; display: none; width: 500px; pointer-events: auto; z-index: 1000;">
-  <div style="display: flex; align-items: center; gap: 10px;">
-    <span style="font-size: 10px; min-width: 30px;">時間:</span>
-    <input type="range" id="timeSlider" min="0" max="100" value="0" style="flex: 1; height: 4px;">
-    <span id="timeDisplay" style="font-size: 10px; min-width: 60px; text-align: right;">0.0 / 0.0s</span>
+<div id="timeSliderContainer" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 12px 30px; border-radius: 8px; color: white; font-family: Arial, sans-serif; display: none; width: 750px; pointer-events: auto; z-index: 1000;">
+  <div style="display: flex; align-items: center; gap: 15px;">
+    <span style="font-size: 15px; min-width: 45px;">時間:</span>
+    <input type="range" id="timeSlider" min="0" max="100" value="0" style="flex: 1; height: 6px;">
+    <span id="timeDisplay" style="font-size: 15px; min-width: 90px; text-align: right;">0.0 / 0.0s</span>
   </div>
 </div>
 

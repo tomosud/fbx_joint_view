@@ -409,6 +409,11 @@ export class MotionCapture {
       }
     }
     
+    // JSONファイル名生成: cam_ + fbx名 + (開始フレーム-終了フレーム).json
+    const fbxFileName = window.app.fbxLoader.getCurrentFileName();
+    const fbxBaseName = fbxFileName ? fbxFileName.replace(/\.fbx$/i, '') : 'animation';
+    const fileName = `cam_${fbxBaseName}(${startFrame}-${endFrame}).json`;
+    
     // JSONファイルダウンロード
     const output = JSON.stringify(jsonData, null, 2);
     const blob = new Blob([output], { type: 'application/json' });
@@ -416,7 +421,7 @@ export class MotionCapture {
     
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'camera_animation.json';
+    link.download = fileName;
     link.click();
     
     URL.revokeObjectURL(url);
@@ -437,7 +442,7 @@ export class MotionCapture {
     
     const scene = window.app.scene;
     
-    // カメラ軌跡のライン作成
+    // カメラ軌跡のライン作成（毎フレーム表示）
     const points = this.cameraMotionData.map(frame => frame.position);
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineBasicMaterial({ 
@@ -450,8 +455,9 @@ export class MotionCapture {
     scene.add(line);
     this.cameraVisualizationObjects.push(line);
     
-    // カメラ位置にコーンマーカーを配置（間引き表示）
-    const step = Math.max(1, Math.floor(this.cameraMotionData.length / 20)); // 最大20個
+    // カメラ位置にコーンマーカーを配置（1秒ごとに1個）
+    const frameRate = 60; // 想定フレームレート
+    const step = frameRate; // 1秒ごと（60フレームごと）
     for (let i = 0; i < this.cameraMotionData.length; i += step) {
       const frame = this.cameraMotionData[i];
       
@@ -541,10 +547,12 @@ export class MotionCapture {
         movingCamera.quaternion.copy(targetFrame.quaternion);
         movingCamera.rotateX(Math.PI / 2); // 向き修正
         
-        // 動いているカメラを色で区別（黄色）
+        // 動いているカメラを色で区別（黄色）、5倍大きく
         if (movingCamera.material) {
           movingCamera.material.color.setHex(0xffff00);
         }
+        // 5倍のスケール
+        movingCamera.scale.set(5, 5, 5);
       }
     }
   }
