@@ -4,7 +4,8 @@
 
 https://tomosud.github.io/fbx_joint_view/
 
-https://tomosud.github.io/fbx_joint_view/
+再生のみ
+https://tomosud.github.io/fbx_joint_view/fbx_joint_fixed.html
 
 ## 🎯 主な機能
 
