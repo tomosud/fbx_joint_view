@@ -2,6 +2,10 @@
 
 **メッシュを含まないFBX（ジョイント/ボーン階層 + アニメーション）の再生とカメラモーションキャプチャ**を行うWebアプリケーション。
 
+https://tomosud.github.io/fbx_joint_view/
+
+https://tomosud.github.io/fbx_joint_view/
+
 ## 🎯 主な機能
 
 - **FBXアニメーション再生**: ジョイント階層の可視化とアニメーション制御
