@@ -19,14 +19,12 @@
 <div id="fileImport" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif;">
   <div style="margin-bottom: 10px; font-size: 14px; font-weight: bold;">FBXファイル読み込み</div>
   <input type="file" id="fbxFileInput" accept=".fbx" style="margin-bottom: 10px; color: white; background: rgba(255,255,255,0.1); border: 1px solid #555; border-radius: 3px; padding: 5px;">
-  
+
   <!-- 座標系変換チェックボックス -->
-  <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+  <div style="display: flex; align-items: center; gap: 8px;">
     <input type="checkbox" id="convertToYUp" checked style="margin: 0;">
     <label for="convertToYUp" style="font-size: 12px; cursor: pointer;">Z-up → Y-up 変換</label>
   </div>
-  
-  <button id="loadBtn" style="display: block; width: 100%; padding: 8px; background: #2196F3; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 12px;" disabled>ファイルを読み込み</button>
 </div>
 
 <!-- アニメーション制御UI -->
@@ -295,24 +293,12 @@ try {
   // デフォルトファイルを読み込み
   loadFBXFile("./your_skeleton.fbx");
 
-  // ファイル選択機能の設定
+  // ファイル選択機能の設定（選択時に自動読み込み）
   const fbxFileInput = document.getElementById('fbxFileInput');
-  const loadBtn = document.getElementById('loadBtn');
 
   fbxFileInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
     if (file && file.name.toLowerCase().endsWith('.fbx')) {
-      loadBtn.disabled = false;
-      loadBtn.textContent = `${file.name}を読み込み`;
-    } else {
-      loadBtn.disabled = true;
-      loadBtn.textContent = 'ファイルを読み込み';
-    }
-  });
-
-  loadBtn.addEventListener('click', () => {
-    const file = fbxFileInput.files[0];
-    if (file) {
       const fileUrl = URL.createObjectURL(file);
       loadFBXFile(fileUrl, file.name);
     }
