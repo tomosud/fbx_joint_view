@@ -231,39 +231,42 @@ export class FBXLoaderSystem {
   }
 
   // ルートボーンから第一階層への接続ラインを非表示にする
+  // インデックスバッファで非表示ラインを描画対象から除外する方式
   hideRootBoneConnections(helper) {
-    // SkeletonHelperのbonesを走査し、ルートボーン直下の子ボーンを特定
-    // ルートボーン = isBoneだが親がBoneでないノード
-    const hidePositionIndices = [];
-    let j = 0;
+    // ルートボーンを特定（isBoneだが親がBoneでないノード）
+    let rootBone = null;
+    for (const bone of helper.bones) {
+      if (bone.isBone && (!bone.parent || !bone.parent.isBone)) {
+        rootBone = bone;
+        break;
+      }
+    }
+    if (!rootBone) return;
 
-    for (let i = 0; i < helper.bones.length; i++) {
-      const bone = helper.bones[i];
+    // 非表示対象の頂点ペアインデックスを収集
+    const hideSet = new Set();
+    let j = 0;
+    for (const bone of helper.bones) {
       if (bone.parent && bone.parent.isBone) {
-        // この骨の親がルートボーン（親の親がBoneでない）かチェック
-        if (!bone.parent.parent || !bone.parent.parent.isBone) {
-          hidePositionIndices.push(j);
-          console.log("非表示ボーン接続:", bone.name, "→", bone.parent.name);
+        if (bone.parent === rootBone) {
+          hideSet.add(j);
+          console.log("非表示ボーン接続:", bone.name, "→", rootBone.name);
         }
         j += 2;
       }
     }
 
-    if (hidePositionIndices.length > 0) {
-      const originalUpdate = helper.updateMatrixWorld.bind(helper);
-      helper.updateMatrixWorld = function(force) {
-        originalUpdate(force);
-        // 非表示対象のラインを両端同一座標にしてゼロ長にする
-        const position = this.geometry.getAttribute('position');
-        for (const idx of hidePositionIndices) {
-          const x = position.getX(idx);
-          const y = position.getY(idx);
-          const z = position.getZ(idx);
-          position.setXYZ(idx + 1, x, y, z);
-        }
-        position.needsUpdate = true;
-      };
+    if (hideSet.size === 0) return;
+
+    // 描画対象の頂点ペアだけをインデックスバッファに登録
+    const posCount = helper.geometry.getAttribute('position').count;
+    const indices = [];
+    for (let i = 0; i < posCount; i += 2) {
+      if (!hideSet.has(i)) {
+        indices.push(i, i + 1);
+      }
     }
+    helper.geometry.setIndex(indices);
   }
 
   setupAnimation(root) {
