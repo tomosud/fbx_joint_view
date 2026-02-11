@@ -122,9 +122,10 @@ export class CameraControls {
     // 画面クリックでポインターロック復帰（UI要素を除外）
     document.addEventListener('click', (event) => {
       // UI要素（スライダーなど）を除外
-      const isUIElement = event.target.closest('#timeSliderContainer') || 
+      const isUIElement = event.target.closest('#timeSliderContainer') ||
                          event.target.closest('#info') ||
                          event.target.closest('#shortcutGuide') ||
+                         event.target.closest('#fileImport') ||
                          event.target.id === 'timeSlider';
       
       if (!this.fpsControls.isLocked && !isUIElement) {
@@ -147,6 +148,7 @@ export class CameraControls {
     this.infoDiv = document.getElementById('info');
     this.shortcutGuide = document.getElementById('shortcutGuide');
     this.timeSliderContainer = document.getElementById('timeSliderContainer');
+    this.fileImport = document.getElementById('fileImport');
   }
 
   startFPS() {
@@ -287,7 +289,7 @@ export class CameraControls {
 
   // UI透明度制御
   setUIOpacity(opacity) {
-    const elements = [this.infoDiv, this.shortcutGuide, this.timeSliderContainer];
+    const elements = [this.infoDiv, this.shortcutGuide, this.timeSliderContainer, this.fileImport];
     elements.forEach(element => {
       if (element) {
         // 現在の背景色から透明度のみを変更

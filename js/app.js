@@ -166,7 +166,7 @@ export class App {
         const timeText = recordTime ? recordTime.textContent : '0.0s';
         
         const smoothStatus = this.cameraControls?.smoothingEnabled ? 'ON' : 'OFF';
-        infoDiv.innerHTML = `v1.3.4 - カメラ高さ: ${height}m | スムーズ: ${smoothStatus}<div id="recordStatus" style="margin-top: 5px;">${statusText}</div><div id="recordTime" style="margin-top: 2px;">${timeText}</div>`;
+        infoDiv.innerHTML = `v1.3.5 - カメラ高さ: ${height}m | スムーズ: ${smoothStatus}<div id="recordStatus" style="margin-top: 5px;">${statusText}</div><div id="recordTime" style="margin-top: 2px;">${timeText}</div>`;
         
         // motionCaptureに要素の再取得を通知
         if (window.motionCapture) {
@@ -177,7 +177,7 @@ export class App {
         const smoothStatus = this.cameraControls?.smoothingEnabled ? 'ON' : 'OFF';
         const heightText = infoDiv.firstChild;
         if (heightText && heightText.nodeType === Node.TEXT_NODE) {
-          heightText.textContent = `v1.3.4 - カメラ高さ: ${height}m | スムーズ: ${smoothStatus}`;
+          heightText.textContent = `v1.3.5 - カメラ高さ: ${height}m | スムーズ: ${smoothStatus}`;
         }
       }
     }

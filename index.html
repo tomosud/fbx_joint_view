@@ -62,7 +62,7 @@
   FBXファイルを読み込み中...
 </div>
 <div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; background: rgba(0,0,0,0.7); padding: 15px; border-radius: 5px; font-size: 18px; max-width: 450px; pointer-events: none; z-index: 1000;">
-  v1.3.4 - 初期化中...
+  v1.3.5 - 初期化中...
   <div id="recordStatus" style="margin-top: 8px;">待機中</div>
   <div id="recordTime" style="margin-top: 3px;">0.0s</div>
 </div>
@@ -86,8 +86,15 @@
   </div>
 </div>
 
-<input type="file" id="fbxFileInput" accept=".fbx" style="display: none;">
-<input type="checkbox" id="convertToYUp" checked style="display: none;">
+<!-- ファイルインポートUI -->
+<div id="fileImport" style="position: absolute; bottom: 60px; left: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif; pointer-events: auto; z-index: 1000;">
+  <div style="margin-bottom: 10px; font-size: 14px; font-weight: bold;">FBXファイル読み込み</div>
+  <input type="file" id="fbxFileInput" accept=".fbx" style="margin-bottom: 10px; color: white; background: rgba(255,255,255,0.1); border: 1px solid #555; border-radius: 3px; padding: 5px; width: 100%;">
+  <div style="display: flex; align-items: center; gap: 8px;">
+    <input type="checkbox" id="convertToYUp" checked style="margin: 0;">
+    <label for="convertToYUp" style="font-size: 12px; cursor: pointer;">Z-up → Y-up 変換</label>
+  </div>
+</div>
 
 <!-- 再生ポイントスライダー -->
 <div id="timeSliderContainer" style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 12px 30px; border-radius: 8px; color: white; font-family: Arial, sans-serif; display: none; width: 750px; pointer-events: auto; z-index: 1000;">

@@ -178,59 +178,36 @@ export class FBXLoaderSystem {
   setupSkeleton(root, coordinateSystem) {
     let skeletonFound = false;
     let boneCount = 0;
-    
-    // バウンディングボックス情報をデバッグ出力（修正完了により無効化）
-    // const boundingBox = new THREE.Box3().setFromObject(root);
-    // console.log("=== バウンディングボックス解析 ===");
-    // console.log("Min:", boundingBox.min);
-    // console.log("Max:", boundingBox.max);
-    // console.log("Size:", boundingBox.getSize(new THREE.Vector3()));
-    // console.log("Center:", boundingBox.getCenter(new THREE.Vector3()));
-    
+
     root.traverse((obj) => {
       console.log("オブジェクト:", obj.name, "タイプ:", obj.type, "isBone:", obj.isBone);
-      
-      // 各オブジェクトの位置情報をデバッグ出力（修正完了により無効化）
-      // if (obj.position) {
-      //   console.log("  位置:", obj.position.x, obj.position.y, obj.position.z);
-      // }
-      
+
       if (obj.isBone) {
         boneCount++;
-        // console.log("  ボーン位置:", obj.position.x, obj.position.y, obj.position.z);
-        // console.log("  ワールド位置:", obj.getWorldPosition(new THREE.Vector3()));
       }
-      
+
       if (obj.isSkinnedMesh && obj.skeleton) {
         console.log("SkinnedMeshのスケルトンを発見:", obj.name);
-        // console.log("  SkinnedMesh位置:", obj.position.x, obj.position.y, obj.position.z);
-        // console.log("  Skeleton bones数:", obj.skeleton.bones.length);
-        
-        // スケルトンのバウンディングボックスを確認（修正完了により無効化）
-        // const skeletonBox = new THREE.Box3().setFromObject(obj);
-        // console.log("  SkinnedMeshバウンディング:", skeletonBox.min, skeletonBox.max);
-        
+
         const helper = new THREE.SkeletonHelper(obj);
         helper.material.linewidth = 2;
-        
-        // SkeletonHelperのフラスタムカリングを無効化（バウンディングボックス異常による消失問題の修正）
         helper.frustumCulled = false;
-        
+
+        // ルートボーンの第一階層接続を非表示
+        this.hideRootBoneConnections(helper);
+
         this.scene.add(helper);
         skeletonFound = true;
-        
-        // SkeletonHelperのバウンディングボックスも確認（修正完了により無効化）
-        // const helperBox = new THREE.Box3().setFromObject(helper);
-        // console.log("  SkeletonHelperバウンディング:", helperBox.min, helperBox.max);
       }
       else if (obj.isBone && (!obj.parent || !obj.parent.isBone)) {
         console.log("ルートボーンを発見:", obj.name);
         const helper = new THREE.SkeletonHelper(obj);
         helper.material.linewidth = 2;
-        
-        // SkeletonHelperのフラスタムカリングを無効化（バウンディングボックス異常による消失問題の修正）
         helper.frustumCulled = false;
-        
+
+        // ルートボーンの第一階層接続を非表示
+        this.hideRootBoneConnections(helper);
+
         this.scene.add(helper);
         skeletonFound = true;
       }
@@ -250,6 +227,42 @@ export class FBXLoaderSystem {
       this.updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>スケルトン表示中<br>ボーン: ${boneCount}個<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
     } else {
       this.updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーンが見つかりません<br>オブジェクト構造をコンソールで確認してください`);
+    }
+  }
+
+  // ルートボーンから第一階層への接続ラインを非表示にする
+  hideRootBoneConnections(helper) {
+    // SkeletonHelperのbonesを走査し、ルートボーン直下の子ボーンを特定
+    // ルートボーン = isBoneだが親がBoneでないノード
+    const hidePositionIndices = [];
+    let j = 0;
+
+    for (let i = 0; i < helper.bones.length; i++) {
+      const bone = helper.bones[i];
+      if (bone.parent && bone.parent.isBone) {
+        // この骨の親がルートボーン（親の親がBoneでない）かチェック
+        if (!bone.parent.parent || !bone.parent.parent.isBone) {
+          hidePositionIndices.push(j);
+          console.log("非表示ボーン接続:", bone.name, "→", bone.parent.name);
+        }
+        j += 2;
+      }
+    }
+
+    if (hidePositionIndices.length > 0) {
+      const originalUpdate = helper.updateMatrixWorld.bind(helper);
+      helper.updateMatrixWorld = function(force) {
+        originalUpdate(force);
+        // 非表示対象のラインを両端同一座標にしてゼロ長にする
+        const position = this.geometry.getAttribute('position');
+        for (const idx of hidePositionIndices) {
+          const x = position.getX(idx);
+          const y = position.getY(idx);
+          const z = position.getZ(idx);
+          position.setXYZ(idx + 1, x, y, z);
+        }
+        position.needsUpdate = true;
+      };
     }
   }
 
