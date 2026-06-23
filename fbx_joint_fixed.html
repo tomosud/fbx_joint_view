@@ -63,6 +63,17 @@
     <input type="range" id="speedSlider" min="0.1" max="3" step="0.1" value="1" style="width: 400px;">
     <span id="speedDisplay" style="font-size: 12px; min-width: 35px;">1.0x</span>
   </div>
+  <div id="ghostControls" style="margin-top: 8px; display: none; align-items: center; gap: 10px; justify-content: center;">
+    <button id="ghostToggleBtn" style="padding: 7px 14px; background: #455a64; color: white; border: none; border-radius: 5px; cursor: pointer;">Ghost Off</button>
+    <label style="font-size: 12px;">Back
+      <input type="number" id="ghostSecondsInput" min="0.1" max="10" step="0.1" value="1" style="width: 55px; margin-left: 4px;">
+      sec
+    </label>
+    <label style="font-size: 12px;">Count
+      <input type="number" id="ghostCountInput" min="1" max="50" step="1" value="10" style="width: 45px; margin-left: 4px;">
+    </label>
+    <span id="ghostStatus" style="font-size: 12px; min-width: 90px;">cached: 0</span>
+  </div>
 </div>
 
 <script type="importmap">
@@ -155,6 +166,15 @@ try {
   let currentAction = null;
   let currentObjectUrl = null;
   const loader = new FBXLoader();
+  let animationBones = [];
+  let animationBoneLinks = [];
+  let frameCache = new Map();
+  let cachedFrameNumbers = [];
+  let ghostEnabled = false;
+  let ghostGroup = new THREE.Group();
+  let lastGhostRenderKey = '';
+  let activeAnimationState = null;
+  scene.add(ghostGroup);
 
   // FBX読み込み関数
   function loadFBXFile(fileUrl, fileName = null) {
@@ -185,6 +205,7 @@ try {
 
     // UIを非表示にする
     document.getElementById('controls').style.display = 'none';
+    resetGhostState();
     
     updateInfo(`FBX読み込み中... ${fileName || fileUrl}`);
     console.log("FBXファイルの読み込みを開始:", fileName || fileUrl);
@@ -216,6 +237,7 @@ try {
       // シーンへ追加
       scene.add(root);
       currentFBXObject = root;
+      collectAnimationBones(root);
 
       // テストキューブを削除
       scene.remove(testCube);
@@ -375,6 +397,7 @@ try {
   convertToYUpCheckbox.addEventListener('change', () => {
     // 既に読み込まれているFBXオブジェクトがある場合、リアルタイムで座標系を変更
     if (currentFBXObject) {
+      resetGhostCache();
       const convertToYUp = convertToYUpCheckbox.checked;
       if (convertToYUp) {
         // Y-up座標系に変換
@@ -489,6 +512,205 @@ try {
     return Math.min(240, Math.max(1, commonRate || inferred || 30));
   }
 
+  function clearGhostLines() {
+    while (ghostGroup.children.length > 0) {
+      const child = ghostGroup.children.pop();
+      if (child.geometry) {
+        child.geometry.dispose();
+      }
+      if (child.material) {
+        child.material.dispose();
+      }
+    }
+  }
+
+  function resetGhostState() {
+    animationBones = [];
+    animationBoneLinks = [];
+    frameCache = new Map();
+    cachedFrameNumbers = [];
+    ghostEnabled = false;
+    lastGhostRenderKey = '';
+    activeAnimationState = null;
+    clearGhostLines();
+
+    const ghostControls = document.getElementById('ghostControls');
+    const ghostToggleBtn = document.getElementById('ghostToggleBtn');
+    const ghostStatus = document.getElementById('ghostStatus');
+    if (ghostControls) {
+      ghostControls.style.display = 'none';
+    }
+    if (ghostToggleBtn) {
+      ghostToggleBtn.textContent = 'Ghost Off';
+      ghostToggleBtn.style.background = '#455a64';
+    }
+    if (ghostStatus) {
+      ghostStatus.textContent = 'cached: 0';
+    }
+  }
+
+  function resetGhostCache() {
+    frameCache = new Map();
+    cachedFrameNumbers = [];
+    ghostEnabled = false;
+    lastGhostRenderKey = '';
+    clearGhostLines();
+
+    const ghostControls = document.getElementById('ghostControls');
+    const ghostToggleBtn = document.getElementById('ghostToggleBtn');
+    const ghostStatus = document.getElementById('ghostStatus');
+    if (ghostControls) {
+      ghostControls.style.display = 'none';
+    }
+    if (ghostToggleBtn) {
+      ghostToggleBtn.textContent = 'Ghost Off';
+      ghostToggleBtn.style.background = '#455a64';
+    }
+    if (ghostStatus) {
+      ghostStatus.textContent = 'cached: 0';
+    }
+  }
+
+  function collectAnimationBones(root) {
+    animationBones = [];
+    animationBoneLinks = [];
+
+    root.traverse((obj) => {
+      if (obj.isBone) {
+        animationBones.push(obj);
+      }
+    });
+
+    const boneIndex = new Map(animationBones.map((bone, index) => [bone, index]));
+    for (const bone of animationBones) {
+      if (bone.parent && bone.parent.isBone && boneIndex.has(bone.parent)) {
+        animationBoneLinks.push([boneIndex.get(bone.parent), boneIndex.get(bone)]);
+      }
+    }
+  }
+
+  function updateGhostControlsVisibility() {
+    const ghostControls = document.getElementById('ghostControls');
+    const ghostStatus = document.getElementById('ghostStatus');
+    if (ghostControls && frameCache.size > 0) {
+      ghostControls.style.display = 'flex';
+    }
+    if (ghostStatus) {
+      ghostStatus.textContent = `cached: ${frameCache.size}`;
+    }
+  }
+
+  function cacheCurrentPose(frame) {
+    if (!currentFBXObject || animationBones.length === 0 || frameCache.has(frame)) {
+      return;
+    }
+
+    currentFBXObject.updateMatrixWorld(true);
+    const positions = new Float32Array(animationBones.length * 3);
+    const position = new THREE.Vector3();
+
+    for (let i = 0; i < animationBones.length; i++) {
+      animationBones[i].getWorldPosition(position);
+      positions[i * 3] = position.x;
+      positions[i * 3 + 1] = position.y;
+      positions[i * 3 + 2] = position.z;
+    }
+
+    frameCache.set(frame, positions);
+    cachedFrameNumbers.push(frame);
+    cachedFrameNumbers.sort((a, b) => a - b);
+    updateGhostControlsVisibility();
+  }
+
+  function getClosestCachedFrame(targetFrame, minFrame) {
+    let closestFrame = null;
+    let closestDistance = Infinity;
+
+    for (const frame of cachedFrameNumbers) {
+      if (frame < minFrame || frame > targetFrame) {
+        continue;
+      }
+
+      const distance = targetFrame - frame;
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestFrame = frame;
+      }
+    }
+
+    return closestFrame;
+  }
+
+  function renderGhosts(currentFrame) {
+    if (!ghostEnabled || !activeAnimationState || animationBoneLinks.length === 0 || frameCache.size === 0) {
+      if (ghostGroup.children.length > 0) {
+        clearGhostLines();
+      }
+      lastGhostRenderKey = '';
+      return;
+    }
+
+    const secondsInput = document.getElementById('ghostSecondsInput');
+    const countInput = document.getElementById('ghostCountInput');
+    const secondsBack = Math.min(10, Math.max(0.1, parseFloat(secondsInput.value) || 1));
+    const ghostCount = Math.min(50, Math.max(1, parseInt(countInput.value, 10) || 10));
+    const renderKey = `${currentFrame}|${secondsBack}|${ghostCount}|${frameCache.size}`;
+    if (renderKey === lastGhostRenderKey) {
+      return;
+    }
+    lastGhostRenderKey = renderKey;
+    clearGhostLines();
+
+    const frameBack = Math.max(1, Math.round(secondsBack * activeAnimationState.frameRate));
+    const minFrame = Math.max(0, currentFrame - frameBack);
+    const usedFrames = new Set();
+
+    for (let i = 1; i <= ghostCount; i++) {
+      const targetFrame = currentFrame - Math.round((frameBack * i) / ghostCount);
+      const cachedFrame = getClosestCachedFrame(targetFrame, minFrame);
+      if (cachedFrame === null || usedFrames.has(cachedFrame)) {
+        continue;
+      }
+      usedFrames.add(cachedFrame);
+
+      const positions = frameCache.get(cachedFrame);
+      const vertices = [];
+      for (const [parentIndex, childIndex] of animationBoneLinks) {
+        vertices.push(
+          positions[parentIndex * 3],
+          positions[parentIndex * 3 + 1],
+          positions[parentIndex * 3 + 2],
+          positions[childIndex * 3],
+          positions[childIndex * 3 + 1],
+          positions[childIndex * 3 + 2]
+        );
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+      const ageRatio = Math.min(1, Math.max(0, (currentFrame - cachedFrame) / frameBack));
+      const material = new THREE.LineBasicMaterial({
+        color: 0x66ccff,
+        transparent: true,
+        opacity: 0.45 * (1 - ageRatio) + 0.08,
+        depthTest: true
+      });
+      ghostGroup.add(new THREE.LineSegments(geometry, material));
+    }
+  }
+
+  function updateFrameCacheAndGhosts() {
+    if (!activeAnimationState || !activeAnimationState.action) {
+      return;
+    }
+
+    const frame = activeAnimationState.currentFrame();
+    if (!activeAnimationState.isPlaying || activeAnimationState.isPlaying()) {
+      cacheCurrentPose(frame);
+    }
+    renderGhosts(frame);
+  }
+
   setupAnimationControls = function(action, duration) {
     const playPauseBtn = document.getElementById('playPauseBtn');
     const resetBtn = document.getElementById('resetBtn');
@@ -498,6 +720,9 @@ try {
     const timeDisplay = document.getElementById('timeDisplay');
     const speedSlider = document.getElementById('speedSlider');
     const speedDisplay = document.getElementById('speedDisplay');
+    const ghostToggleBtn = document.getElementById('ghostToggleBtn');
+    const ghostSecondsInput = document.getElementById('ghostSecondsInput');
+    const ghostCountInput = document.getElementById('ghostCountInput');
     const clip = action.getClip ? action.getClip() : null;
     const frameRate = inferFrameRate(clip);
     const totalFrames = Math.max(1, Math.round(duration * frameRate));
@@ -544,7 +769,17 @@ try {
       if (mixer) {
         mixer.update(0);
       }
+      renderGhosts(nextFrame);
     }
+
+    activeAnimationState = {
+      action,
+      duration,
+      frameRate,
+      totalFrames,
+      currentFrame,
+      isPlaying: () => isPlaying
+    };
 
     setPlaying(true);
     setFrame(0);
@@ -580,6 +815,26 @@ try {
       speedDisplay.textContent = speed.toFixed(1) + 'x';
     };
 
+    ghostToggleBtn.onclick = () => {
+      ghostEnabled = !ghostEnabled;
+      ghostToggleBtn.textContent = ghostEnabled ? 'Ghost On' : 'Ghost Off';
+      ghostToggleBtn.style.background = ghostEnabled ? '#009688' : '#455a64';
+      if (!ghostEnabled) {
+        lastGhostRenderKey = '';
+        clearGhostLines();
+      } else {
+        renderGhosts(currentFrame());
+      }
+    };
+
+    ghostSecondsInput.oninput = () => {
+      renderGhosts(currentFrame());
+    };
+
+    ghostCountInput.oninput = () => {
+      renderGhosts(currentFrame());
+    };
+
     window.updateTimeDisplay = () => {
       if (!action) {
         return;
@@ -604,6 +859,7 @@ try {
     requestAnimationFrame(animate);
     if (mixer) {
       mixer.update(clock.getDelta());
+      updateFrameCacheAndGhosts();
       // タイムディスプレイを更新
       if (window.updateTimeDisplay) {
         window.updateTimeDisplay();
