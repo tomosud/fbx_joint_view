@@ -1,5 +1,5 @@
 @echo off
-start "" python -m http.server 8007
+start "" python -m http.server 8008
 
 timeout /t 1 > nul
 

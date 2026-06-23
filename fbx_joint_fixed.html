@@ -5,6 +5,22 @@
   <title>FBX Skeleton Viewer</title>
   <style>
     body {margin:0; overflow:hidden;}
+    #dropOverlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      z-index: 1000;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 28px;
+      font-weight: bold;
+      background: rgba(30, 120, 180, 0.35);
+      border: 4px dashed rgba(255, 255, 255, 0.85);
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+    body.dragging #dropOverlay { display: grid; }
   </style>
 </head>
 <body>
@@ -28,15 +44,19 @@
 </div>
 
 <!-- アニメーション制御UI -->
-<div id="controls" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif; display: none; width: 600px;">
+<div id="dropOverlay">Drop FBX file to load</div>
+
+<div id="controls" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif; display: none; width: 700px;">
   <div style="margin-bottom: 10px; text-align: center;">
+    <button id="prevFrameBtn" title="Previous frame" style="margin: 0 5px; padding: 8px 12px; background: #607d8b; color: white; border: none; border-radius: 5px; cursor: pointer;">-1 frame</button>
     <button id="playPauseBtn" style="margin: 0 5px; padding: 8px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; min-width: 80px;">▶ 再生</button>
     <button id="resetBtn" style="margin: 0 5px; padding: 8px 15px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">⏮ リセット</button>
+    <button id="nextFrameBtn" title="Next frame" style="margin: 0 5px; padding: 8px 12px; background: #607d8b; color: white; border: none; border-radius: 5px; cursor: pointer;">+1 frame</button>
   </div>
   <div style="display: flex; align-items: center; gap: 15px; justify-content: center;">
-    <span style="font-size: 12px; min-width: 35px;">時間:</span>
-    <input type="range" id="timeSlider" min="0" max="100" value="0" style="width: 400px;">
-    <span id="timeDisplay" style="font-size: 12px; min-width: 80px;">0.0 / 0.0s</span>
+    <span style="font-size: 12px; min-width: 45px;">Frame:</span>
+    <input type="range" id="timeSlider" min="0" max="100" step="1" value="0" style="width: 430px;">
+    <span id="timeDisplay" style="font-size: 12px; min-width: 130px;">0 / 0</span>
   </div>
   <div style="margin-top: 8px; display: flex; align-items: center; gap: 15px; justify-content: center;">
     <span style="font-size: 12px; min-width: 35px;">速度:</span>
@@ -133,10 +153,13 @@ try {
   let mixer;
   let currentFBXObject = null;
   let currentAction = null;
+  let currentObjectUrl = null;
   const loader = new FBXLoader();
 
   // FBX読み込み関数
   function loadFBXFile(fileUrl, fileName = null) {
+    loadingDiv.style.display = 'block';
+    loadingDiv.textContent = 'Loading FBX file...';
     // 既存のオブジェクトとアニメーションをクリア
     if (currentFBXObject) {
       scene.remove(currentFBXObject);
@@ -296,12 +319,55 @@ try {
   // ファイル選択機能の設定（選択時に自動読み込み）
   const fbxFileInput = document.getElementById('fbxFileInput');
 
+  function loadLocalFBXFile(file) {
+    if (!file || !file.name.toLowerCase().endsWith('.fbx')) {
+      updateInfo('Please drop or select an FBX file.');
+      return;
+    }
+
+    if (currentObjectUrl) {
+      URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = null;
+    }
+
+    currentObjectUrl = URL.createObjectURL(file);
+    loadFBXFile(currentObjectUrl, file.name);
+  }
+
   fbxFileInput.addEventListener('change', (event) => {
     const file = event.target.files[0];
-    if (file && file.name.toLowerCase().endsWith('.fbx')) {
-      const fileUrl = URL.createObjectURL(file);
-      loadFBXFile(fileUrl, file.name);
+    loadLocalFBXFile(file);
+  });
+
+  let dragDepth = 0;
+
+  window.addEventListener('dragenter', (event) => {
+    event.preventDefault();
+    dragDepth++;
+    document.body.classList.add('dragging');
+  });
+
+  window.addEventListener('dragover', (event) => {
+    event.preventDefault();
+  });
+
+  window.addEventListener('dragleave', (event) => {
+    event.preventDefault();
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) {
+      document.body.classList.remove('dragging');
     }
+  });
+
+  window.addEventListener('drop', (event) => {
+    event.preventDefault();
+    dragDepth = 0;
+    document.body.classList.remove('dragging');
+
+    const file = Array.from(event.dataTransfer.files).find((item) =>
+      item.name.toLowerCase().endsWith('.fbx')
+    );
+    loadLocalFBXFile(file);
   });
 
   // 座標系変換チェックボックスのイベントリスナー
@@ -394,6 +460,137 @@ try {
       }
     };
   }
+
+  function inferFrameRate(clip) {
+    if (!clip || !clip.tracks || clip.tracks.length === 0) {
+      return 30;
+    }
+
+    const deltas = [];
+    for (const track of clip.tracks) {
+      const times = track.times;
+      for (let i = 1; i < times.length; i++) {
+        const delta = times[i] - times[i - 1];
+        if (delta > 0.0001 && delta < 1) {
+          deltas.push(delta);
+        }
+      }
+    }
+
+    if (deltas.length === 0) {
+      return 30;
+    }
+
+    deltas.sort((a, b) => a - b);
+    const medianDelta = deltas[Math.floor(deltas.length / 2)];
+    const inferred = Math.round(1 / medianDelta);
+    const commonRates = [24, 25, 30, 48, 50, 60, 120];
+    const commonRate = commonRates.find((rate) => Math.abs(rate - (1 / medianDelta)) < 0.25);
+    return Math.min(240, Math.max(1, commonRate || inferred || 30));
+  }
+
+  setupAnimationControls = function(action, duration) {
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const prevFrameBtn = document.getElementById('prevFrameBtn');
+    const nextFrameBtn = document.getElementById('nextFrameBtn');
+    const timeSlider = document.getElementById('timeSlider');
+    const timeDisplay = document.getElementById('timeDisplay');
+    const speedSlider = document.getElementById('speedSlider');
+    const speedDisplay = document.getElementById('speedDisplay');
+    const clip = action.getClip ? action.getClip() : null;
+    const frameRate = inferFrameRate(clip);
+    const totalFrames = Math.max(1, Math.round(duration * frameRate));
+
+    let isPlaying = true;
+
+    timeSlider.min = 0;
+    timeSlider.max = totalFrames;
+    timeSlider.step = 1;
+    timeSlider.value = 0;
+
+    function frameToTime(frame) {
+      return Math.min(duration, Math.max(0, frame / frameRate));
+    }
+
+    function currentFrame() {
+      return Math.min(totalFrames, Math.max(0, Math.round(action.time * frameRate)));
+    }
+
+    function setPlayButtonState() {
+      if (isPlaying) {
+        playPauseBtn.innerHTML = 'Pause';
+        playPauseBtn.style.background = '#ff9800';
+      } else {
+        playPauseBtn.innerHTML = 'Play';
+        playPauseBtn.style.background = '#4CAF50';
+      }
+    }
+
+    function setPlaying(nextIsPlaying) {
+      isPlaying = nextIsPlaying;
+      action.paused = !isPlaying;
+      if (isPlaying && !action.isRunning()) {
+        action.play();
+      }
+      setPlayButtonState();
+    }
+
+    function setFrame(frame) {
+      const nextFrame = Math.min(totalFrames, Math.max(0, Math.round(frame)));
+      action.time = frameToTime(nextFrame);
+      timeSlider.value = nextFrame;
+      timeDisplay.textContent = `${nextFrame} / ${totalFrames} frames (${frameRate}fps)`;
+      if (mixer) {
+        mixer.update(0);
+      }
+    }
+
+    setPlaying(true);
+    setFrame(0);
+
+    playPauseBtn.onclick = () => {
+      setPlaying(!isPlaying);
+    };
+
+    resetBtn.onclick = () => {
+      action.reset();
+      action.play();
+      setPlaying(true);
+      setFrame(0);
+    };
+
+    prevFrameBtn.onclick = () => {
+      setPlaying(false);
+      setFrame(currentFrame() - 1);
+    };
+
+    nextFrameBtn.onclick = () => {
+      setPlaying(false);
+      setFrame(currentFrame() + 1);
+    };
+
+    timeSlider.oninput = () => {
+      setFrame(parseInt(timeSlider.value, 10));
+    };
+
+    speedSlider.oninput = () => {
+      const speed = parseFloat(speedSlider.value);
+      action.setEffectiveTimeScale(speed);
+      speedDisplay.textContent = speed.toFixed(1) + 'x';
+    };
+
+    window.updateTimeDisplay = () => {
+      if (!action) {
+        return;
+      }
+      const frame = currentFrame();
+      if (document.activeElement !== timeSlider) {
+        timeSlider.value = frame;
+      }
+      timeDisplay.textContent = `${frame} / ${totalFrames} frames (${frameRate}fps)`;
+    };
+  };
 
   const clock = new THREE.Clock();
   
