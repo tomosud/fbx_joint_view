@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>FBX Skeleton Viewer</title>
@@ -25,25 +25,25 @@
 </head>
 <body>
 <div id="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-family: Arial, sans-serif; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px;">
-  FBXファイルを読み込み中...
+  Loading FBX file...
 </div>
 <div id="info" style="position: absolute; top: 10px; left: 10px; color: white; font-family: monospace; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; font-size: 12px; max-width: 300px;">
-  初期化中...
+  Starting...
 </div>
 
 <!-- ファイルインポートUI -->
 <div id="fileImport" style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif;">
-  <div style="margin-bottom: 10px; font-size: 14px; font-weight: bold;">FBXファイル読み込み</div>
+  <div style="margin-bottom: 10px; font-size: 14px; font-weight: bold;">Load FBX File</div>
   <input type="file" id="fbxFileInput" accept=".fbx" style="margin-bottom: 10px; color: white; background: rgba(255,255,255,0.1); border: 1px solid #555; border-radius: 3px; padding: 5px;">
 
   <!-- 座標系変換チェックボックス -->
   <div style="display: flex; align-items: center; gap: 8px;">
     <input type="checkbox" id="convertToYUp" checked style="margin: 0;">
-    <label for="convertToYUp" style="font-size: 12px; cursor: pointer;">Z-up → Y-up 変換</label>
+    <label for="convertToYUp" style="font-size: 12px; cursor: pointer;">Convert Z-up to Y-up</label>
   </div>
   <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
-    <input type="checkbox" id="hideMeshes" checked style="margin: 0;">
-    <label for="hideMeshes" style="font-size: 12px; cursor: pointer;">joint以外のmeshを非表示</label>
+    <input type="checkbox" id="showMeshes" style="margin: 0;">
+    <label for="showMeshes" style="font-size: 12px; cursor: pointer;">Show Meshes</label>
   </div>
 </div>
 
@@ -53,8 +53,8 @@
 <div id="controls" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; color: white; font-family: Arial, sans-serif; display: none; width: 700px;">
   <div style="margin-bottom: 10px; text-align: center;">
     <button id="prevFrameBtn" title="Previous frame" style="margin: 0 5px; padding: 8px 12px; background: #607d8b; color: white; border: none; border-radius: 5px; cursor: pointer;">-1 frame</button>
-    <button id="playPauseBtn" style="margin: 0 5px; padding: 8px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; min-width: 80px;">▶ 再生</button>
-    <button id="resetBtn" style="margin: 0 5px; padding: 8px 15px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">⏮ リセット</button>
+    <button id="playPauseBtn" style="margin: 0 5px; padding: 8px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; min-width: 80px;">▶ Play</button>
+    <button id="resetBtn" style="margin: 0 5px; padding: 8px 15px; background: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer;">⏮ Reset</button>
     <button id="nextFrameBtn" title="Next frame" style="margin: 0 5px; padding: 8px 12px; background: #607d8b; color: white; border: none; border-radius: 5px; cursor: pointer;">+1 frame</button>
   </div>
   <div style="display: flex; align-items: center; gap: 15px; justify-content: center;">
@@ -63,17 +63,17 @@
     <span id="timeDisplay" style="font-size: 12px; min-width: 130px;">0 / 0</span>
   </div>
   <div style="margin-top: 8px; display: flex; align-items: center; gap: 15px; justify-content: center;">
-    <span style="font-size: 12px; min-width: 35px;">速度:</span>
+    <span style="font-size: 12px; min-width: 35px;">Speed:</span>
     <input type="range" id="speedSlider" min="0.1" max="3" step="0.1" value="1" style="width: 400px;">
     <span id="speedDisplay" style="font-size: 12px; min-width: 35px;">1.0x</span>
   </div>
   <div id="ghostControls" style="margin-top: 8px; display: none; align-items: center; gap: 10px; justify-content: center;">
     <button id="ghostToggleBtn" style="padding: 7px 14px; background: #455a64; color: white; border: none; border-radius: 5px; cursor: pointer;">Ghost Off</button>
-    <label style="font-size: 12px;">Back
+    <label style="font-size: 12px;">Past
       <input type="number" id="ghostSecondsInput" min="0.1" max="10" step="0.1" value="1" style="width: 55px; margin-left: 4px;">
       sec
     </label>
-    <span id="ghostStatus" style="font-size: 12px; min-width: 90px;">cached: 0</span>
+    <span id="ghostStatus" style="font-size: 12px; min-width: 90px;">frames: 0</span>
   </div>
 </div>
 
@@ -116,12 +116,12 @@ function showError(message) {
   errorDiv.style.fontFamily = 'monospace';
   errorDiv.style.borderRadius = '10px';
   errorDiv.style.maxWidth = '80%';
-  errorDiv.innerHTML = `<strong>エラー:</strong> ${message}`;
+  errorDiv.innerHTML = `<strong>Error:</strong> ${message}`;
   document.body.appendChild(errorDiv);
 }
 
 try {
-  updateInfo("Three.js初期化中...");
+  updateInfo("Starting Three.js...");
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x202020);
@@ -132,7 +132,7 @@ try {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  updateInfo("レンダラー初期化完了");
+  updateInfo("Renderer ready");
 
   const controls = new OrbitControls(camera, renderer.domElement);
   
@@ -160,7 +160,7 @@ try {
   const testCube = new THREE.Mesh(testGeometry, testMaterial);
   scene.add(testCube);
 
-  updateInfo("基本シーン設定完了、FBXファイル読み込み開始...");
+  updateInfo("Scene ready. Loading FBX file...");
 
   let mixer;
   let currentFBXObject = null;
@@ -212,7 +212,7 @@ try {
     document.getElementById('controls').style.display = 'none';
     resetGhostState();
     
-    updateInfo(`FBX読み込み中... ${fileName || fileUrl}`);
+    updateInfo(`Loading FBX... ${fileName || fileUrl}`);
     console.log("FBXファイルの読み込みを開始:", fileName || fileUrl);
 
     loader.load(
@@ -225,14 +225,14 @@ try {
       const animationCount = root.animations ? root.animations.length : 0;
       let animationDuration = animationCount > 0 ? root.animations[0].duration : 0;
       currentAnimationInfoText = animationCount > 1
-        ? `<br>アニメーション: ${animationCount}個 / ${animationDuration.toFixed(2)}秒`
+        ? `<br>Animation: ${animationCount} clips / ${animationDuration.toFixed(2)} sec`
         : animationCount === 1
-          ? `<br>アニメーション: ${animationDuration.toFixed(2)}秒`
-          : '<br>アニメーション: なし';
+          ? `<br>Animation: ${animationDuration.toFixed(2)} sec`
+          : '<br>Animation: none';
 
       // 座標系変換（チェックボックスの状態に応じて）
       const convertToYUp = document.getElementById('convertToYUp').checked;
-      const coordinateSystem = convertToYUp ? 'Y-up (変換適用)' : 'Z-up (元の座標系)';
+      const coordinateSystem = convertToYUp ? 'Y-up (converted)' : 'Z-up (original)';
       
       if (convertToYUp) {
         // Y-up座標系に変換（FBXはZ-upが多いため）
@@ -296,11 +296,11 @@ try {
             console.log("ボーンにAxesHelperを追加:", obj.name);
           }
         });
-        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーン: ${boneCount}個（AxesHelper表示）${currentAnimationInfoText}`);
+        updateInfo(`FBX loaded<br>Axis: ${coordinateSystem}<br>Bones: ${boneCount} (Axes shown)${currentAnimationInfoText}`);
       } else if (skeletonFound) {
-        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>スケルトン表示中<br>ボーン: ${boneCount}個${currentAnimationInfoText}`);
+        updateInfo(`FBX loaded<br>Axis: ${coordinateSystem}<br>Skeleton shown<br>Bones: ${boneCount}${currentAnimationInfoText}`);
       } else {
-        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーンが見つかりません${currentAnimationInfoText}<br>オブジェクト構造をコンソールで確認してください`);
+        updateInfo(`FBX loaded<br>Axis: ${coordinateSystem}<br>No bones found${currentAnimationInfoText}<br>Check object data in the console`);
       }
 
       // — アニメーション再生 —
@@ -337,13 +337,13 @@ try {
     (progress) => {
       if (progress.total > 0) {
         const percent = Math.round((progress.loaded / progress.total) * 100);
-        updateInfo(`FBX読み込み中... ${percent}%`);
+        updateInfo(`Loading FBX... ${percent}%`);
         console.log("読み込み進行:", percent + '%');
       }
     },
     (error) => {
       console.error("FBXファイルの読み込みエラー:", error);
-      showError(`FBXファイルが読み込めません<br>ファイル: ${fileName || fileUrl}<br>詳細: ${error.message || error}`);
+      showError(`Could not load FBX file<br>File: ${fileName || fileUrl}<br>Detail: ${error.message || error}`);
     }
   );
   }
@@ -416,18 +416,18 @@ try {
         // Y-up座標系に変換
         currentFBXObject.rotation.x = -Math.PI / 2;
         console.log("座標系をY-upに変更");
-        updateInfo(`座標系: Y-up (変換適用)<br>ボーン表示中${currentAnimationInfoText}`);
+        updateInfo(`Axis: Y-up (converted)<br>Bones shown${currentAnimationInfoText}`);
       } else {
         // 元の座標系を維持（Z-up）
         currentFBXObject.rotation.x = 0;
         console.log("座標系をZ-upに変更");
-        updateInfo(`座標系: Z-up (元の座標系)<br>ボーン表示中${currentAnimationInfoText}`);
+        updateInfo(`Axis: Z-up (original)<br>Bones shown${currentAnimationInfoText}`);
       }
     }
   });
 
-  const hideMeshesCheckbox = document.getElementById('hideMeshes');
-  hideMeshesCheckbox.addEventListener('change', () => {
+  const showMeshesCheckbox = document.getElementById('showMeshes');
+  showMeshesCheckbox.addEventListener('change', () => {
     applyMeshVisibility();
   });
 
@@ -448,7 +448,7 @@ try {
         // 一時停止
         action.paused = true;
         isPlaying = false;
-        playPauseBtn.innerHTML = '▶ 再生';
+        playPauseBtn.innerHTML = '▶ Play';
         playPauseBtn.style.background = '#4CAF50';
       } else {
         // 再生
@@ -457,13 +457,13 @@ try {
           action.play();
         }
         isPlaying = true;
-        playPauseBtn.innerHTML = '⏸ 停止';
+        playPauseBtn.innerHTML = '⏸ Pause';
         playPauseBtn.style.background = '#ff9800';
       }
     });
     
     // 初期状態を再生中に設定
-    playPauseBtn.innerHTML = '⏸ 停止';
+    playPauseBtn.innerHTML = '⏸ Pause';
     playPauseBtn.style.background = '#ff9800';
     
     // リセットボタン
@@ -471,7 +471,7 @@ try {
       action.reset();
       action.play();
       isPlaying = true;
-      playPauseBtn.innerHTML = '⏸ 停止';
+      playPauseBtn.innerHTML = '⏸ Pause';
       playPauseBtn.style.background = '#ff9800';
     });
     
@@ -535,10 +535,10 @@ try {
       return;
     }
 
-    const hideMeshes = document.getElementById('hideMeshes').checked;
+    const showMeshes = document.getElementById('showMeshes').checked;
     currentFBXObject.traverse((obj) => {
       if (obj.isMesh || obj.isSkinnedMesh) {
-        obj.visible = !hideMeshes;
+        obj.visible = showMeshes;
       }
     });
   }
@@ -591,7 +591,7 @@ try {
       ghostToggleBtn.style.background = '#455a64';
     }
     if (ghostStatus) {
-      ghostStatus.textContent = 'cached: 0';
+      ghostStatus.textContent = 'frames: 0';
     }
   }
 
@@ -613,7 +613,7 @@ try {
       ghostToggleBtn.style.background = '#455a64';
     }
     if (ghostStatus) {
-      ghostStatus.textContent = 'cached: 0';
+      ghostStatus.textContent = 'frames: 0';
     }
   }
 
@@ -642,7 +642,7 @@ try {
       ghostControls.style.display = 'flex';
     }
     if (ghostStatus) {
-      ghostStatus.textContent = `cached: ${frameCache.size}`;
+      ghostStatus.textContent = `frames: ${frameCache.size}`;
     }
   }
 
@@ -892,7 +892,7 @@ try {
 
 } catch (error) {
   console.error("初期化エラー:", error);
-  showError(`初期化に失敗しました: ${error.message}`);
+  showError(`Start failed: ${error.message}`);
 }
 </script>
 </body>
