@@ -176,6 +176,9 @@ try {
   let lastGhostRenderKey = '';
   let activeAnimationState = null;
   let currentAnimationInfoText = '';
+  const CURRENT_JOINT_RENDER_ORDER = 100;
+  const GHOST_RENDER_ORDER = 10;
+  ghostGroup.renderOrder = GHOST_RENDER_ORDER;
   scene.add(ghostGroup);
 
   // FBX読み込み関数
@@ -267,6 +270,7 @@ try {
           console.log("SkinnedMeshのスケルトンを発見:", obj.name);
           const helper = new THREE.SkeletonHelper(obj);
           helper.material.linewidth = 2;
+          makeCurrentJointAlwaysOnTop(helper);
           scene.add(helper);
           skeletonFound = true;
         }
@@ -275,6 +279,7 @@ try {
           console.log("ルートボーンを発見:", obj.name);
           const helper = new THREE.SkeletonHelper(obj);
           helper.material.linewidth = 2;
+          makeCurrentJointAlwaysOnTop(helper);
           scene.add(helper);
           skeletonFound = true;
         }
@@ -286,6 +291,7 @@ try {
         root.traverse((obj) => {
           if (obj.isBone) {
             const axesHelper = new THREE.AxesHelper(0.5);
+            makeCurrentJointAlwaysOnTop(axesHelper);
             obj.add(axesHelper);
             console.log("ボーンにAxesHelperを追加:", obj.name);
           }
@@ -537,6 +543,21 @@ try {
     });
   }
 
+  function makeCurrentJointAlwaysOnTop(helper) {
+    helper.renderOrder = CURRENT_JOINT_RENDER_ORDER;
+    helper.traverse((obj) => {
+      obj.renderOrder = CURRENT_JOINT_RENDER_ORDER;
+      const materials = Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : [];
+      for (const material of materials) {
+        material.transparent = true;
+        material.opacity = 1;
+        material.depthTest = false;
+        material.depthWrite = false;
+        material.needsUpdate = true;
+      }
+    });
+  }
+
   function clearGhostLines() {
     while (ghostGroup.children.length > 0) {
       const child = ghostGroup.children.pop();
@@ -692,10 +713,13 @@ try {
       const material = new THREE.LineBasicMaterial({
         color: 0xff9f1c,
         transparent: true,
-        opacity: 0.28 * (1 - ageRatio) + 0.04,
-        depthTest: true
+        opacity: 0.16 * (1 - ageRatio) + 0.03,
+        depthTest: true,
+        depthWrite: false
       });
-      ghostGroup.add(new THREE.LineSegments(geometry, material));
+      const line = new THREE.LineSegments(geometry, material);
+      line.renderOrder = GHOST_RENDER_ORDER;
+      ghostGroup.add(line);
     }
   }
 
