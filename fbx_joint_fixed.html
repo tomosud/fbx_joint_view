@@ -41,6 +41,10 @@
     <input type="checkbox" id="convertToYUp" checked style="margin: 0;">
     <label for="convertToYUp" style="font-size: 12px; cursor: pointer;">Z-up → Y-up 変換</label>
   </div>
+  <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+    <input type="checkbox" id="hideMeshes" checked style="margin: 0;">
+    <label for="hideMeshes" style="font-size: 12px; cursor: pointer;">joint以外のmeshを非表示</label>
+  </div>
 </div>
 
 <!-- アニメーション制御UI -->
@@ -68,9 +72,6 @@
     <label style="font-size: 12px;">Back
       <input type="number" id="ghostSecondsInput" min="0.1" max="10" step="0.1" value="1" style="width: 55px; margin-left: 4px;">
       sec
-    </label>
-    <label style="font-size: 12px;">Count
-      <input type="number" id="ghostCountInput" min="1" max="50" step="1" value="10" style="width: 45px; margin-left: 4px;">
     </label>
     <span id="ghostStatus" style="font-size: 12px; min-width: 90px;">cached: 0</span>
   </div>
@@ -174,6 +175,7 @@ try {
   let ghostGroup = new THREE.Group();
   let lastGhostRenderKey = '';
   let activeAnimationState = null;
+  let currentAnimationInfoText = '';
   scene.add(ghostGroup);
 
   // FBX読み込み関数
@@ -216,8 +218,14 @@ try {
       hideLoading();
       console.log("FBXファイルの読み込み完了:", root);
       console.log("アニメーション数:", root.animations ? root.animations.length : 0);
-      
-      updateInfo(`FBX読み込み完了<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+
+      const animationCount = root.animations ? root.animations.length : 0;
+      let animationDuration = animationCount > 0 ? root.animations[0].duration : 0;
+      currentAnimationInfoText = animationCount > 1
+        ? `<br>アニメーション: ${animationCount}個 / ${animationDuration.toFixed(2)}秒`
+        : animationCount === 1
+          ? `<br>アニメーション: ${animationDuration.toFixed(2)}秒`
+          : '<br>アニメーション: なし';
 
       // 座標系変換（チェックボックスの状態に応じて）
       const convertToYUp = document.getElementById('convertToYUp').checked;
@@ -238,6 +246,7 @@ try {
       scene.add(root);
       currentFBXObject = root;
       collectAnimationBones(root);
+      applyMeshVisibility();
 
       // テストキューブを削除
       scene.remove(testCube);
@@ -281,16 +290,14 @@ try {
             console.log("ボーンにAxesHelperを追加:", obj.name);
           }
         });
-        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーン: ${boneCount}個（AxesHelper表示）<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーン: ${boneCount}個（AxesHelper表示）${currentAnimationInfoText}`);
       } else if (skeletonFound) {
-        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>スケルトン表示中<br>ボーン: ${boneCount}個<br>アニメーション: ${root.animations ? root.animations.length : 0}個`);
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>スケルトン表示中<br>ボーン: ${boneCount}個${currentAnimationInfoText}`);
       } else {
-        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーンが見つかりません<br>オブジェクト構造をコンソールで確認してください`);
+        updateInfo(`FBX読み込み完了<br>座標系: ${coordinateSystem}<br>ボーンが見つかりません${currentAnimationInfoText}<br>オブジェクト構造をコンソールで確認してください`);
       }
 
       // — アニメーション再生 —
-      let animationDuration = 0;
-      
       if (root.animations && root.animations.length > 0) {
         console.log("アニメーションを開始:", root.animations[0].name);
         mixer = new THREE.AnimationMixer(root);
@@ -403,14 +410,19 @@ try {
         // Y-up座標系に変換
         currentFBXObject.rotation.x = -Math.PI / 2;
         console.log("座標系をY-upに変更");
-        updateInfo(`座標系: Y-up (変換適用)<br>ボーン表示中<br>アニメーション: ${currentFBXObject.animations ? currentFBXObject.animations.length : 0}個`);
+        updateInfo(`座標系: Y-up (変換適用)<br>ボーン表示中${currentAnimationInfoText}`);
       } else {
         // 元の座標系を維持（Z-up）
         currentFBXObject.rotation.x = 0;
         console.log("座標系をZ-upに変更");
-        updateInfo(`座標系: Z-up (元の座標系)<br>ボーン表示中<br>アニメーション: ${currentFBXObject.animations ? currentFBXObject.animations.length : 0}個`);
+        updateInfo(`座標系: Z-up (元の座標系)<br>ボーン表示中${currentAnimationInfoText}`);
       }
     }
+  });
+
+  const hideMeshesCheckbox = document.getElementById('hideMeshes');
+  hideMeshesCheckbox.addEventListener('change', () => {
+    applyMeshVisibility();
   });
 
   // アニメーション制御関数
@@ -510,6 +522,19 @@ try {
     const commonRates = [24, 25, 30, 48, 50, 60, 120];
     const commonRate = commonRates.find((rate) => Math.abs(rate - (1 / medianDelta)) < 0.25);
     return Math.min(240, Math.max(1, commonRate || inferred || 30));
+  }
+
+  function applyMeshVisibility() {
+    if (!currentFBXObject) {
+      return;
+    }
+
+    const hideMeshes = document.getElementById('hideMeshes').checked;
+    currentFBXObject.traverse((obj) => {
+      if (obj.isMesh || obj.isSkinnedMesh) {
+        obj.visible = !hideMeshes;
+      }
+    });
   }
 
   function clearGhostLines() {
@@ -622,25 +647,6 @@ try {
     updateGhostControlsVisibility();
   }
 
-  function getClosestCachedFrame(targetFrame, minFrame) {
-    let closestFrame = null;
-    let closestDistance = Infinity;
-
-    for (const frame of cachedFrameNumbers) {
-      if (frame < minFrame || frame > targetFrame) {
-        continue;
-      }
-
-      const distance = targetFrame - frame;
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestFrame = frame;
-      }
-    }
-
-    return closestFrame;
-  }
-
   function renderGhosts(currentFrame) {
     if (!ghostEnabled || !activeAnimationState || animationBoneLinks.length === 0 || frameCache.size === 0) {
       if (ghostGroup.children.length > 0) {
@@ -651,10 +657,8 @@ try {
     }
 
     const secondsInput = document.getElementById('ghostSecondsInput');
-    const countInput = document.getElementById('ghostCountInput');
     const secondsBack = Math.min(10, Math.max(0.1, parseFloat(secondsInput.value) || 1));
-    const ghostCount = Math.min(50, Math.max(1, parseInt(countInput.value, 10) || 10));
-    const renderKey = `${currentFrame}|${secondsBack}|${ghostCount}|${frameCache.size}`;
+    const renderKey = `${currentFrame}|${secondsBack}|${frameCache.size}`;
     if (renderKey === lastGhostRenderKey) {
       return;
     }
@@ -663,15 +667,11 @@ try {
 
     const frameBack = Math.max(1, Math.round(secondsBack * activeAnimationState.frameRate));
     const minFrame = Math.max(0, currentFrame - frameBack);
-    const usedFrames = new Set();
 
-    for (let i = 1; i <= ghostCount; i++) {
-      const targetFrame = currentFrame - Math.round((frameBack * i) / ghostCount);
-      const cachedFrame = getClosestCachedFrame(targetFrame, minFrame);
-      if (cachedFrame === null || usedFrames.has(cachedFrame)) {
+    for (const cachedFrame of cachedFrameNumbers) {
+      if (cachedFrame < minFrame || cachedFrame >= currentFrame) {
         continue;
       }
-      usedFrames.add(cachedFrame);
 
       const positions = frameCache.get(cachedFrame);
       const vertices = [];
@@ -690,9 +690,9 @@ try {
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
       const ageRatio = Math.min(1, Math.max(0, (currentFrame - cachedFrame) / frameBack));
       const material = new THREE.LineBasicMaterial({
-        color: 0x66ccff,
+        color: 0xff9f1c,
         transparent: true,
-        opacity: 0.45 * (1 - ageRatio) + 0.08,
+        opacity: 0.28 * (1 - ageRatio) + 0.04,
         depthTest: true
       });
       ghostGroup.add(new THREE.LineSegments(geometry, material));
@@ -722,7 +722,6 @@ try {
     const speedDisplay = document.getElementById('speedDisplay');
     const ghostToggleBtn = document.getElementById('ghostToggleBtn');
     const ghostSecondsInput = document.getElementById('ghostSecondsInput');
-    const ghostCountInput = document.getElementById('ghostCountInput');
     const clip = action.getClip ? action.getClip() : null;
     const frameRate = inferFrameRate(clip);
     const totalFrames = Math.max(1, Math.round(duration * frameRate));
@@ -828,10 +827,6 @@ try {
     };
 
     ghostSecondsInput.oninput = () => {
-      renderGhosts(currentFrame());
-    };
-
-    ghostCountInput.oninput = () => {
       renderGhosts(currentFrame());
     };
 
