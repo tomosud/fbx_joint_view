@@ -103,9 +103,14 @@ function hideLoading() {
   loadingDiv.style.display = 'none';
 }
 
+function clearErrors() {
+  document.querySelectorAll('.fbx-load-error').forEach((element) => element.remove());
+}
+
 function showError(message) {
   hideLoading();
   const errorDiv = document.createElement('div');
+  errorDiv.className = 'fbx-load-error';
   errorDiv.style.position = 'absolute';
   errorDiv.style.top = '50%';
   errorDiv.style.left = '50%';
@@ -181,8 +186,59 @@ try {
   ghostGroup.renderOrder = GHOST_RENDER_ORDER;
   scene.add(ghostGroup);
 
+  const FBX_BINARY_SIGNATURE = 'Kaydara FBX Binary  \0';
+  const FBX_ASCII_PROBE = ['K', 'a', 'y', 'd', 'a', 'r', 'a', '\\', 'F', 'B', 'X', '\\', 'B', 'i', 'n', 'a', 'r', 'y', '\\', '\\'];
+
+  function isBinaryFBX(bytes) {
+    if (bytes.length < FBX_BINARY_SIGNATURE.length) return false;
+
+    for (let i = 0; i < FBX_BINARY_SIGNATURE.length; i++) {
+      if (bytes[i] !== FBX_BINARY_SIGNATURE.charCodeAt(i)) return false;
+    }
+
+    return true;
+  }
+
+  // Three.js FBXLoaderのASCII判定を再現する。
+  // 正しいASCII FBXでも、先頭付近の文字が偶然一致するとUnknown formatになる。
+  function passesThreeASCIIProbe(text) {
+    let cursor = 0;
+
+    for (let i = 0; i < FBX_ASCII_PROBE.length; i++) {
+      const actual = text[0];
+      text = text.slice(cursor + 1);
+      cursor++;
+
+      if (actual === FBX_ASCII_PROBE[i]) return false;
+    }
+
+    return true;
+  }
+
+  async function makeFBXLoaderCompatible(file) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (isBinaryFBX(bytes)) return file;
+
+    const headerText = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 4096)));
+    const isASCIIFile = /FBXHeaderExtension\s*:/.test(headerText) && /FBXVersion\s*:\s*\d+/.test(headerText);
+    if (!isASCIIFile || passesThreeASCIIProbe(headerText)) return file;
+
+    // FBXのコメント行をメモリ上だけで追加し、元ファイルは変更しない。
+    // 判定が参照する先頭範囲を、シグネチャに含まれない文字で覆う。
+    const prefix = `;${'.'.repeat(256)}\n`;
+    if (!passesThreeASCIIProbe(prefix + headerText)) {
+      throw new Error('Could not prepare this ASCII FBX for Three.js.');
+    }
+
+    console.warn(`Three.js ASCII FBX compatibility applied: ${file.name}`);
+    return new Blob([new TextEncoder().encode(prefix), bytes], {
+      type: file.type || 'application/octet-stream'
+    });
+  }
+
   // FBX読み込み関数
   function loadFBXFile(fileUrl, fileName = null) {
+    clearErrors();
     loadingDiv.style.display = 'block';
     loadingDiv.textContent = 'Loading FBX file...';
     // 既存のオブジェクトとアニメーションをクリア
@@ -354,19 +410,30 @@ try {
   // ファイル選択機能の設定（選択時に自動読み込み）
   const fbxFileInput = document.getElementById('fbxFileInput');
 
-  function loadLocalFBXFile(file) {
+  async function loadLocalFBXFile(file) {
     if (!file || !file.name.toLowerCase().endsWith('.fbx')) {
       updateInfo('Please drop or select an FBX file.');
       return;
     }
 
-    if (currentObjectUrl) {
-      URL.revokeObjectURL(currentObjectUrl);
-      currentObjectUrl = null;
-    }
+    loadingDiv.style.display = 'block';
+    loadingDiv.textContent = 'Preparing FBX file...';
+    updateInfo(`Preparing FBX... ${file.name}`);
 
-    currentObjectUrl = URL.createObjectURL(file);
-    loadFBXFile(currentObjectUrl, file.name);
+    try {
+      const compatibleFile = await makeFBXLoaderCompatible(file);
+
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = null;
+      }
+
+      currentObjectUrl = URL.createObjectURL(compatibleFile);
+      loadFBXFile(currentObjectUrl, file.name);
+    } catch (error) {
+      console.error('FBX compatibility preparation failed:', error);
+      showError(`Could not prepare FBX file<br>File: ${file.name}<br>Detail: ${error.message || error}`);
+    }
   }
 
   fbxFileInput.addEventListener('change', (event) => {

@@ -5,7 +5,7 @@
 https://tomosud.github.io/fbx_joint_view/
 
 再生のみ
-https://tomosud.github.io/fbx_joint_view/fbx_joint_fixed.html
+https://tomosud.github.io/fbx_joint_view/fbx_joint_fixed.html?v=20260925-1
 <img width="1261" height="496" alt="image" src="https://github.com/user-attachments/assets/51c4c4f3-4ece-4e01-9d46-52e1b3c1ad57" />
 
 
